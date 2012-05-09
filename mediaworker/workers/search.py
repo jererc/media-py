@@ -166,7 +166,7 @@ def search_files():
         files = File().search(search['q'], CAT_DEF[search['category']])
         if len(files) >= NB_FILES_DEF[search['category']]:
             MSearch().remove(id=search['_id'])
-            logger.info('removed search %s "%s": found %s', search['category'], search['q'], files[0])
+            logger.info('removed %s search "%s": found %s', search['category'], search['q'], files[0])
             continue
         MSearch().update(id=search['_id'], info={'last_search_local': datetime.utcnow()})
 
