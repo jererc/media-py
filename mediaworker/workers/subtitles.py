@@ -38,8 +38,7 @@ def search_opensubtitles(video_file, name, season, episode, date=None):
     video = get_file(video_file)
     opensubtitles = Opensubtitles(settings.OPENSUBTITLES_USERNAME, settings.OPENSUBTITLES_PASSWORD)
     try:
-        for sub in opensubtitles.results(name, season=season, episode=episode, lang=OPENSUBTITLES_LANG):
-        # for sub in opensubtitles.results(name, season=season, episode=episode, date=date, lang=OPENSUBTITLES_LANG):
+        for sub in opensubtitles.results(name, season=season, episode=episode, date=date, lang=OPENSUBTITLES_LANG):
             filename_sub = get_sub_filename(video.filename, sub['filename'], LANG_DEF[OPENSUBTITLES_LANG])
             file_dst = os.path.join(video.path, filename_sub)
             if os.path.exists(file_dst):
