@@ -10,7 +10,7 @@ from systools.system import loop, timeout, timer
 
 from mediacore.model.file import File
 from mediacore.web.google import Google
-from mediacore.web.opensubtitles import Opensubtitles, OpensubtitlesError, DownloadQuotaReached, DownloadError
+from mediacore.web.opensubtitles import Opensubtitles, OpensubtitlesError, DownloadQuotaReached
 from mediacore.util.media import get_file, get_clean_filename
 from mediacore.util.db import get_db
 
@@ -44,17 +44,15 @@ def search_opensubtitles(video_file, name, season, episode, date=None):
             if os.path.exists(file_dst):
                 continue
 
-            if opensubtitles.save(sub['url'], file_dst):
-                File().add(file_dst)
-                logger.info('saved %s', file_dst)
+            try:
+                if opensubtitles.save(sub['url'], file_dst):
+                    File().add(file_dst)
+                    logger.info('saved %s', file_dst)
+            except DownloadQuotaReached, e:
+                update_quota()
+                logger.info(e)
+                raise Exception
 
-    except DownloadQuotaReached, e:
-        update_quota()
-        logger.info(e)
-        raise Exception
-    except DownloadError, e:
-        logger.error(e)
-        return
     except OpensubtitlesError:
         return
 
