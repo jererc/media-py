@@ -6,7 +6,8 @@ from mediaworker import env, settings
 
 from systools.system import loop, timeout, timer
 
-from mediacore.model.download import Download
+from mediacore.model.result import Result
+from mediacore.model.search import Search
 from mediacore.util.transmission import Transmission, TransmissionError, TorrentExists
 
 
@@ -27,17 +28,25 @@ def main():
 
     transmission.watch(PATH_FINISHED, max_torrent_age=MAX_TORRENT_AGE)
 
-    for res in Download().find({'processed': False}):
-        url = res['url_magnet'] or res['url_torrent']
+    for res in Result().find({
+            'processed': False,
+            'url_magnet': {'$ne': None},
+            }):
         try:
-            transmission.add(url)
+            transmission.add(res['url_magnet'])
+
+            Search().col.update({'_id': res['search_id']},
+                    {'$addToSet': {'hashes': res['hash']}}, safe=True)
+
             logger.info('added torrent %s to transmission', res['title'].encode('utf-8'))
         except TorrentExists, e:
-            logger.info('torrent %s already exists: %s', res['title'], e)
+            logger.info('torrent %s (%s) already exists: %s', res['title'].encode('utf-8'), res['hash'], e)
         except TransmissionError, e:
-            logger.error('failed to add torrent %s: %s', res['title'], e)
+            logger.error('failed to add torrent %s (%s): %s', res['title'].encode('utf-8'), res['hash'], e)
             continue
-        Download().update({'_id': res['_id']}, {'$set': {'processed': datetime.utcnow()}}, safe=True)
+
+        Result().update({'_id': res['_id']},
+                {'$set': {'processed': datetime.utcnow()}}, safe=True)
 
 
 if __name__ == '__main__':

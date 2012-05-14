@@ -10,7 +10,6 @@ from systools.system import loop, timeout, timer
 
 from mediacore.model.search import Search as MSearch
 from mediacore.model.file import File
-from mediacore.model.download import Download
 from mediacore.model.result import Result
 from mediacore.web.torrent import results
 from mediacore.web.google import Google
@@ -187,23 +186,33 @@ def search_web():
             if not result:
                 search.nb_errors += 1
                 continue
-            if Result().find_one(result.download_info):
+            if Result().find_one({'hash': result.hash}):
                 continue
             if not search.check_result_dynamic(result):
                 continue
 
             search.nb_results += 1
-            download_info = result.download_info
-            download_info['created'] = datetime.utcnow()
-            Result().insert(download_info)
 
             if not search.check_result(result):
-                continue
-            if Download().find_one(result.download_info):
+                Result().insert({
+                        'hash': result.hash,
+                        'title': result.title,
+                        'net_name': result.net_name,
+                        'created': datetime.utcnow(),
+                        'processed': datetime.utcnow(),
+                        })
                 continue
 
-            download_info['processed'] = False
-            Download().insert(download_info)
+            Result().insert({
+                    'hash': result.hash,
+                    'title': result.title,
+                    'net_name': result.net_name,
+                    'url_magnet': result.url_magnet,
+                    'search_id': search.id,
+                    'created': datetime.utcnow(),
+                    'processed': False,
+                    })
+
             search.nb_downloads += 1
             logger.info('found "%s" on %s', result.title, result.net_name)
             if search.mode != 'ever' and search.nb_downloads >= NB_DOWNLOADS_MAX:
@@ -221,9 +230,7 @@ def main():
     if Google().accessible:
         search_web()
 
-    # Clean collections
     Result().remove({'created': {'$lt': datetime.utcnow() - AGE_RESULTS_MAX}}, safe=True)
-    Download().remove({'created': {'$lt': datetime.utcnow() - AGE_DOWNLOADS_MAX}}, safe=True)
 
 
 if __name__ == '__main__':
