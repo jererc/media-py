@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import os.path
 from datetime import datetime, timedelta
 import logging
 
@@ -8,26 +9,39 @@ from systools.system import loop, timeout, timer
 
 from mediacore.model.result import Result
 from mediacore.model.search import Search
+from mediacore.model.worker import Worker
 from mediacore.util.transmission import Transmission, TransmissionError, TorrentExists
 
 
+NAME = os.path.basename(__file__)
 PATH_FINISHED = settings.PATHS_FINISHED['transmission']
-MAX_TORRENT_AGE = timedelta(days=15)
+AGE_TORRENT_MAX = timedelta(days=15)
+AGE_CLEAN = timedelta(hours=24)
 
 
 logger = logging.getLogger(__name__)
 
 
+def process_download(torrent):
+    # Remove search
+    search = Search().find_one({'hashes': torrent['hash'], 'mode': 'once'})
+    if search:
+        Search().remove(id=search['_id'])
+        logger.info('removed %s search "%s": download finished', search['category'], search['q'])
+
+    return True
+
 @loop(30)
-@timeout(minutes=10)
+@timeout(minutes=30)
 # @timer
 def main():
     transmission = Transmission()
     if not transmission.logged:
         return
 
-    transmission.watch(PATH_FINISHED, max_torrent_age=MAX_TORRENT_AGE)
+    transmission.watch(PATH_FINISHED, age_max=AGE_TORRENT_MAX)
 
+    # Add new torrents
     for res in Result().find({
             'processed': False,
             'url_magnet': {'$ne': None},
@@ -47,6 +61,12 @@ def main():
 
         Result().update({'_id': res['_id']},
                 {'$set': {'processed': datetime.utcnow()}}, safe=True)
+
+    # Clean download dir
+    cleaned = Worker().get_attr(NAME, 'cleaned')
+    if not cleaned or cleaned < datetime.utcnow() - AGE_CLEAN:
+        transmission.clean_download_directory()
+        Worker().set_attr(NAME, 'cleaned', datetime.utcnow())
 
 
 if __name__ == '__main__':
