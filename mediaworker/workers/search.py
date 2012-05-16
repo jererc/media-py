@@ -82,7 +82,7 @@ class Search(object):
         self.last_download = doc.get('last_download')
         self.last_search_local = doc.get('last_search_local')
 
-        self.pages_max = 1 if doc.get('downloads') == 0 else PAGES_MAX
+        self.pages_max = 1 if doc.get('last_downloads') == 0 else PAGES_MAX
         self.nb_results = 0
         self.nb_errors = 0
         self.nb_downloads = 0
@@ -135,8 +135,8 @@ class Search(object):
         if self.nb_errors <= 1:
             info['last_search'] = now
         if not self.nb_errors:
-            info['downloads'] = self.nb_downloads
-        if self.nb_results > 0 or not self.last_activity:
+            info['last_downloads'] = self.nb_downloads
+        if self.nb_results or not self.last_activity:
             info['last_activity'] = now
         if self.nb_downloads:
             info['last_download'] = now
@@ -166,8 +166,8 @@ def search_files():
         if len(files) >= NB_FILES_DEF[search['category']]:
             MSearch().remove(id=search['_id'])
             logger.info('removed %s search "%s": found %s', search['category'], search['q'], files[0])
-            continue
-        MSearch().update(id=search['_id'], info={'last_search_local': datetime.utcnow()})
+        else:
+            MSearch().update(id=search['_id'], info={'last_search_local': datetime.utcnow()})
 
 def search_web():
     for res in MSearch().find(sort=[('last_activity', pymongo.ASCENDING)],
@@ -192,33 +192,29 @@ def search_web():
                 continue
 
             search.nb_results += 1
+            doc = {
+                'hash': result.hash,
+                'title': result.title,
+                'net_name': result.net_name,
+                'url_magnet': result.url_magnet,
+                'search_id': search.id,
+                'created': datetime.utcnow(),
+                'processed': False,
+                }
 
             if not search.check_result(result):
-                Result().insert({
-                        'hash': result.hash,
-                        'title': result.title,
-                        'net_name': result.net_name,
-                        'created': datetime.utcnow(),
-                        'processed': datetime.utcnow(),
-                        })
+                doc['processed'] = datetime.utcnow()
+                Result().insert(doc)
                 continue
 
-            Result().insert({
-                    'hash': result.hash,
-                    'title': result.title,
-                    'net_name': result.net_name,
-                    'url_magnet': result.url_magnet,
-                    'search_id': search.id,
-                    'created': datetime.utcnow(),
-                    'processed': False,
-                    })
-
+            Result().insert(doc)
             search.nb_downloads += 1
             logger.info('found "%s" on %s', result.title, result.net_name)
             if search.mode != 'ever' and search.nb_downloads >= NB_DOWNLOADS_MAX:
                 break
 
         search.save()
+
         if search.nb_downloads and search.mode == 'inc':
             search.add_new()
 
