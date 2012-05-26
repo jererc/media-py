@@ -8,6 +8,7 @@ PATH_MEDIA_ROOT = '/home/user'
 PATHS_FINISHED = {
     'transmission': '/home/user/.transmission/finished', # must be different than the download dir
     }
+PATH_INVALID_DOWNLOAD = '/home/user/misc/invalid'
 PATHS_MEDIA_NEW = {
     'audio': '/home/user/audio/new',
     'video': '/home/user/video/new',
@@ -36,7 +37,7 @@ LOG_FORMAT = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
 LOG_DEFAULT = '/home/user/log/mediaworker.log'
 LOG_ERRORS = '/home/user/log/mediaworker-errors.log'
 LOG_SIZE = 100000   # Bytes
-LOG_COUNT = 10
+LOG_COUNT = 100
 
 
 # Import local settings
@@ -49,7 +50,9 @@ except ImportError:
 # Check directories
 import os
 
-paths = [PATH_MEDIA_ROOT] + PATHS_MEDIA_NEW.values() + PATHS_FINISHED.values() + [os.path.dirname(LOG_DEFAULT), os.path.dirname(LOG_ERRORS), PATH_TMP]
+paths = [PATH_MEDIA_ROOT] + PATHS_MEDIA_NEW.values() \
+    + PATHS_FINISHED.values() \
+    + [os.path.dirname(LOG_DEFAULT), os.path.dirname(LOG_ERRORS), PATH_TMP]
 for path in set(paths):
     if not os.path.exists(path):
         try:

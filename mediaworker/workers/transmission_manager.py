@@ -15,6 +15,7 @@ from mediacore.util.transmission import Transmission, TransmissionError, Torrent
 
 NAME = os.path.basename(__file__)
 PATH_FINISHED = settings.PATHS_FINISHED['transmission']
+PATH_INVALID = settings.PATH_INVALID_DOWNLOAD
 AGE_TORRENT_MAX = timedelta(days=15)
 AGE_CLEAN = timedelta(hours=24)
 
@@ -39,7 +40,7 @@ def main():
     if not transmission.logged:
         return
 
-    transmission.watch(PATH_FINISHED, age_max=AGE_TORRENT_MAX)
+    transmission.watch(PATH_FINISHED, dst_invalid=PATH_INVALID, age_max=AGE_TORRENT_MAX)
 
     # Add new torrents
     for res in Result().find({
