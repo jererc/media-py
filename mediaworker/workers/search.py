@@ -17,26 +17,30 @@ from mediacore.util.title import Title
 from mediacore.util.util import list_in, in_range
 
 
-PAGES_MAX = 20
-LOCAL_SEARCH_RECURRENCE = timedelta(minutes=30)
-AGE_SEARCH_MIN = {
+DELTA_SEARCH_MIN = {
     'once': timedelta(hours=24),
-    'ever': timedelta(hours=24),
     'inc': timedelta(hours=12),
-    }
-AGE_DOWNLOAD_MIN = {
-    'once': timedelta(hours=24),
     'ever': timedelta(hours=24),
-    'inc': timedelta(hours=24),
     }
-AGE_RESULTS_MAX = timedelta(days=120)   # max results age
-AGE_DOWNLOADS_MAX = timedelta(days=120)   # max downloads age
+DELTA_IDLE_SEARCH_MIN = timedelta(days=2)
+DELTA_RESULT_MIN = {
+    'once': timedelta(hours=24),
+    'inc': timedelta(hours=24),
+    'ever': timedelta(hours=24),
+    }
+DELTA_IDLE = timedelta(days=10)
+DELTA_OBSOLETE = timedelta(days=30)
+DELTA_NEXT_SEASON = timedelta(days=60)
+DELTA_RESULTS_MAX = timedelta(days=120)
+
+PAGES_MAX = 20
 NB_SEEDS_MIN = {
     'once': 0,
-    'ever': 1,
     'inc': 10,
+    'ever': 1,
     }
 NB_DOWNLOADS_MAX = 1
+
 CAT_DEF = {     # local categories correspondances
     'anime': 'video',
     'apps': None,
@@ -69,50 +73,92 @@ NB_FILES_DEF = {    # min number of matching local files to find
 logger = logging.getLogger(__name__)
 
 
-class Search(object):
+class Search(dict):
     def __init__(self, doc):
-        self.id = doc['_id']
-        self.q = doc.get('q')
-        self.category = doc.get('category')
-        self.mode = doc.get('mode', 'once')
-        self.langs = doc.get('langs', [])
-        self.first_search = doc.get('first_search')
-        self.last_search = doc.get('last_search')
-        self.last_activity = doc.get('last_activity')
-        self.last_download = doc.get('last_download')
-        self.last_search_local = doc.get('last_search_local')
+        doc['mode'] = doc.get('mode', 'once')
+        doc['langs'] = doc.get('langs', [])
 
-        self.pages_max = 1 if doc.get('last_downloads') == 0 else PAGES_MAX
-        self.nb_results = 0
-        self.nb_errors = 0
-        self.nb_downloads = 0
+        session = doc.get('session', {})
 
-    def check_dates(self):
-        '''Check search dates.
-        '''
+        if session.get('nb_downloads') == 0 \
+                and session.get('nb_errors') == 0 \
+                and session.get('nb_pending') == 0:
+            sort_results = 'age'
+            pages_max = 1
+        else:
+            sort_results = 'seeds'
+            pages_max = PAGES_MAX
+
+        doc['session'] = {
+            'first_search': session.get('first_search'),
+            'last_search': session.get('last_search'),
+            'last_result': session.get('last_result'),
+            'last_download': session.get('last_download'),
+            'sort_results': sort_results,
+            'pages_max': pages_max,
+            'nb_results': 0,
+            'nb_pending': 0,
+            'nb_downloads': 0,
+            'nb_errors': 0,
+            }
+
+        super(Search, self).__init__(doc)
+
+    __getattr__ = dict.__getitem__
+
+    def __setattr__(self, attr_name, value):
+        if hasattr(getattr(self.__class__, attr_name, None), '__set__'):
+            return object.__setattr__(self, attr_name, value)
+        else:
+            return self.__setitem__(attr_name, value)
+
+    def __str__(self):
+        return '%s(%s)' % (self.__class__.__name__, dict(self))
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __delattr__(self, attr_name):
+        if attr_name.startswith('_'):
+            return object.__delattr__(self, attr_name)
+        else:
+            return self.__delitem__(attr_name)
+
+    def _check_dates(self):
         now = datetime.utcnow()
-        if self.last_search and self.last_search > now - AGE_SEARCH_MIN[self.mode]:
+
+        if self.session['last_search'] and self.session['last_search'] > now - DELTA_SEARCH_MIN[self.mode]:
             return False
-        if self.last_download and self.last_download > now - AGE_SEARCH_MIN[self.mode]:
+        if self.session['last_download'] and self.session['last_download'] > now - DELTA_SEARCH_MIN[self.mode]:
             return False
-        if self.last_activity and self.last_activity < now - timedelta(days=22) \
-                and self.last_search and self.last_search > now - timedelta(days=2):
-            return False
+
+        date_ = self.session['last_result'] or self.session['first_search']
+        if date_ and date_ < now - DELTA_IDLE:
+            if self.session['last_search'] and self.session['last_search'] > now - DELTA_IDLE_SEARCH_MIN:
+                return False
+
         return True
 
-    def check_result_dynamic(self, result):
+    def _search_files(self):
+        files = File().search(self.q, CAT_DEF[self.category])
+        if len(files) >= NB_FILES_DEF[self.category]:
+            MSearch().remove(id=self._id)
+            logger.info('removed %s search "%s": found %s', self.category, self.q, files[0])
+            return True
+
+    def _check_result_dynamic(self, result):
         '''Check result dynamic attributes.
         '''
-        if result.date and result.date > datetime.utcnow() - AGE_DOWNLOAD_MIN[self.mode]:
+        if result.date and result.date > datetime.utcnow() - DELTA_RESULT_MIN[self.mode]:
             logger.info('filtered "%s" (%s): too recent (%s)', result.title, result.net_name, result.date)
             return False
-        result.seeds = getattr(result, 'seeds', None)
-        if result.seeds is not None and result.seeds < NB_SEEDS_MIN[self.mode]:
-            logger.info('filtered "%s" (%s): not enough seeds (%s)', result.title, result.net_name, result.seeds)
+        seeds = getattr(result, 'seeds', None)
+        if seeds is not None and seeds < NB_SEEDS_MIN[self.mode]:
+            logger.info('filtered "%s" (%s): not enough seeds (%s)', result.title, result.net_name, seeds)
             return False
         return True
 
-    def check_result(self, result):
+    def _check_result(self, result):
         '''Check result fixed attributes.
         '''
         if getattr(result, 'private', False):
@@ -126,107 +172,125 @@ class Search(object):
             return False
         return True
 
-    def save(self):
-        info = {}
-        now = datetime.utcnow()
-
-        if not self.first_search:
-            info['first_search'] = now
-        if self.nb_errors <= 1:
-            info['last_search'] = now
-        if not self.nb_errors:
-            info['last_downloads'] = self.nb_downloads
-        if self.nb_results or not self.last_activity:
-            info['last_activity'] = now
-        if self.nb_downloads:
-            info['last_download'] = now
-
-        if info:
-            MSearch().update(id=self.id, info=info)
-
-    def add_new(self):
-        '''Create a new search for episodes.
+    def _add_next(self, mode):
+        '''Create a search for next episode or season.
         '''
-        query = MSearch().get_next_episode(self.q)
+        query = None
+        if mode == 'episode':
+            query = MSearch().get_next_episode(self.q)
+        elif mode == 'season':
+            query = MSearch().get_next_season(self.q)
+
         if query and not MSearch().get(q=query):
             MSearch().add(query,
                     category=self.category,
                     mode=self.mode,
                     langs=self.langs)
 
-def search_files():
-    for search in MSearch().find({
-            'mode': {'$ne': 'ever'},
-            '$or': [
-                {'last_search_local': {'$exists': False}},
-                {'last_search_local': {'$lt': datetime.utcnow() - LOCAL_SEARCH_RECURRENCE}},
-                ],
-            }):
-        files = File().search(search['q'], CAT_DEF[search['category']])
-        if len(files) >= NB_FILES_DEF[search['category']]:
-            MSearch().remove(id=search['_id'])
-            logger.info('removed %s search "%s": found %s', search['category'], search['q'], files[0])
+    def validate(self):
+        if not self._check_dates():
+            return False
+        if self.mode == 'ever':
+            return True
+        if self._search_files():
+            return False
+
+        if self.mode == 'inc' and self.category in ('tv', 'anime'):
+            # Episodes next season
+            title = Title(self.q)
+            if title.season and title.episode and int(title.episode) > 2 \
+                    and self.session['first_search'] \
+                    and self.session['first_search'] < datetime.utcnow() - DELTA_NEXT_SEASON:
+                self._add_next('season')
+
+            # TODO: remove obsolete episodes searches
+
         else:
-            MSearch().update(id=search['_id'], info={'last_search_local': datetime.utcnow()})
+            # Remove obsolete searches
+            date_ = self.session['last_result'] or self.session['first_search']
+            if date_ and date_ < datetime.utcnow() - DELTA_OBSOLETE:
+                MSearch().remove(self._id)
+                logger.info('removed search "%s" (no result for %d days)', self.q, DELTA_OBSOLETE.days)
+                return False
 
-def search_web():
-    for res in MSearch().find(sort=[('last_activity', pymongo.ASCENDING)],
-            timeout=False):
-        search = Search(res)
-        if not search.check_dates():
-            continue
+        return True
 
-        logger.info('processing %s search "%s"', search.category, search.q)
+    def process(self):
+        logger.info('processing %s search "%s"', self.category, self.q)
 
-        re_incl_query = Title(search.q).get_search_re('word3' if search.mode != 'inc' else None)
-        for result in results(search.q,
-                category=search.category,
-                pages_max=search.pages_max,
+        re_incl_query = Title(self.q).get_search_re('word3' if self.mode != 'inc' else None)
+        for result in results(self.q,
+                category=self.category,
+                sort=self.session['sort_results'],
+                pages_max=self.session['pages_max'],
                 re_incl=re_incl_query):
             if not result:
-                search.nb_errors += 1
+                self.session['nb_errors'] += 1
                 continue
             if Result().find_one({'hash': result.hash}):
                 continue
-            if not search.check_result_dynamic(result):
+
+            self.session['nb_results'] += 1
+            if not self._check_result_dynamic(result):
+                self.session['nb_pending'] += 1
                 continue
 
-            search.nb_results += 1
             doc = {
                 'hash': result.hash,
                 'title': result.title,
                 'net_name': result.net_name,
                 'url_magnet': result.url_magnet,
-                'search_id': search.id,
+                'search_id': self._id,
                 'created': datetime.utcnow(),
                 'processed': False,
                 }
 
-            if not search.check_result(result):
+            if not self._check_result(result):
                 doc['processed'] = datetime.utcnow()
                 Result().insert(doc)
                 continue
 
+            if self.mode == 'inc':
+                self._add_next('episode')
+
             Result().insert(doc)
-            search.nb_downloads += 1
+            self.session['nb_downloads'] += 1
             logger.info('found "%s" on %s', result.title, result.net_name)
-            if search.mode != 'ever' and search.nb_downloads >= NB_DOWNLOADS_MAX:
+
+            if self.mode != 'ever' and self.session['nb_downloads'] >= NB_DOWNLOADS_MAX:
                 break
 
-        search.save()
+    def save(self):
+        now = datetime.utcnow()
 
-        if search.nb_downloads and search.mode == 'inc':
-            search.add_new()
+        if not self.session['first_search']:
+            self.session['first_search'] = now
+        if self.session['nb_errors'] <= 1:
+            self.session['last_search'] = now
+        if self.session['nb_results']:
+            self.session['last_result'] = now
+        if self.session['nb_downloads']:
+            self.session['last_download'] = now
+
+        MSearch().save(self, safe=True)
+
+
+def process():
+    for res in MSearch().find(sort=[('last_search', pymongo.ASCENDING)],
+            timeout=False):
+        search = Search(res)
+        if search.validate():
+            search.process()
+            search.save()
 
 @loop(60)
 @timeout(hours=2)
 @timer
 def main():
-    search_files()
     if Google().accessible:
-        search_web()
+        process()
 
-    Result().remove({'created': {'$lt': datetime.utcnow() - AGE_RESULTS_MAX}}, safe=True)
+    Result().remove({'created': {'$lt': datetime.utcnow() - DELTA_RESULTS_MAX}}, safe=True)
 
 
 if __name__ == '__main__':
