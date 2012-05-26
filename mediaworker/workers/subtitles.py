@@ -2,6 +2,8 @@
 import os.path
 from datetime import datetime, timedelta
 import re
+import shutil
+import filecmp
 import logging
 
 from mediaworker import env, settings
@@ -9,20 +11,21 @@ from mediaworker import env, settings
 from systools.system import loop, timeout, timer
 
 from mediacore.model.file import File
+from mediacore.model.worker import Worker
 from mediacore.web.google import Google
 from mediacore.web.opensubtitles import Opensubtitles, OpensubtitlesError, DownloadQuotaReached
 from mediacore.util.media import get_file, get_clean_filename
-from mediacore.util.db import get_db
 
 
-COL = 'subtitles'
+NAME = os.path.basename(__file__)
 PATH_VIDEO = settings.PATHS_MEDIA_NEW['video']
 OPENSUBTITLES_LANG = 'eng'
-AGE_SEARCH_MIN = timedelta(hours=6)
+DELTA_SEARCH_MIN = timedelta(hours=6)
 LANG_DEF = {
     'eng': 'en',
     'fre': 'fr',
     }
+LANGS = ['en', 'fr']     # priority according to the list index
 SEARCH_LIMIT = 50
 QUOTA_REACHED_DELAY = timedelta(hours=12)
 
@@ -58,6 +61,36 @@ def search_opensubtitles(video_file, name, season, episode, date=None):
 
     return True
 
+def update_subtitles(video_file):
+    subtitles = []
+    video = get_file(video_file)
+
+    for index, lang in enumerate(sorted(LANGS)):
+        file_sub = video.get_subtitles(lang)
+        if not file_sub:
+            continue
+
+        subtitles.append(lang)
+
+        # Set the destination file name
+        file_dst = os.path.join(video.path, '%s-%s%s' % (video.filename, index, os.path.splitext(file_sub)[1]))
+        if file_dst == file_sub:
+            continue
+        # Check the destination file
+        if os.path.exists(file_dst) and filecmp.cmp(file_sub, file_dst):
+            continue
+        # Copy the selected subtitles file
+        try:
+            shutil.copy(file_sub, file_dst)
+        except Exception:
+            logger.exception('exception')
+            continue
+
+        File().add(file_dst)
+        logger.info('found %s subtitles for %s: %s', lang, video.filename, os.path.basename(file_sub))
+
+    return subtitles
+
 def search_subtitles():
     for file in File().find({
             'type': 'video',
@@ -65,13 +98,14 @@ def search_subtitles():
             'size': {'$gte': 100},
             '$or': [
                 {'last_sub_search': {'$exists': False}},
-                {'last_sub_search': {'$lt': datetime.utcnow() - AGE_SEARCH_MIN}},
+                {'last_sub_search': {'$lt': datetime.utcnow() - DELTA_SEARCH_MIN}},
                 ],
             },
             limit=SEARCH_LIMIT,
             timeout=False):
         if not os.path.exists(file['file']):
             continue
+
         info = file.get('info')
         if not info:
             continue
@@ -90,23 +124,30 @@ def search_subtitles():
         logger.info('searching subtitles for "%s" (%s)', info.get('display_name'), os.path.basename(file['file']))
         try:
             if search_opensubtitles(file['file'], name, season, episode, date):
-                File().update(file['_id'], info={'last_sub_search': datetime.utcnow()})
+                info_ = {'last_sub_search': datetime.utcnow()}
+                subtitles = update_subtitles(file['file'])
+                if subtitles != file.get('subtitles', []):
+                    info_['subtitles'] = subtitles
+                File().update(file['_id'], info=info_)
+
         except Exception:
             return
 
 def update_quota():
-    if not get_db()[COL].find_one({'quota_reached': {'$exists': True}}):
-        get_db()[COL].insert({'quota_reached': datetime.utcnow()}, safe=True)
+    if not Worker().get_attr(NAME, 'quota_reached'):
+        Worker().set_attr(NAME, 'quota_reached', datetime.utcnow())
+
+def check_quota():
+    quota_reached = Worker().get_attr(NAME, 'quota_reached')
+    if not quota_reached or quota_reached < datetime.utcnow() - QUOTA_REACHED_DELAY:
+        return True
 
 @loop(minutes=10)
 @timeout(hours=2)
 @timer
 def main():
-    if not get_db()[COL].find_one({'quota_reached': {
-            '$gte': datetime.utcnow() - QUOTA_REACHED_DELAY,
-            }}):
-        if Google().accessible:
-            search_subtitles()
+    if check_quota() and Google().accessible:
+        search_subtitles()
 
 
 if __name__ == '__main__':
