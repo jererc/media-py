@@ -6,6 +6,7 @@ from glob import glob
 import logging
 from logging.handlers import RotatingFileHandler
 import sys
+import signal
 import traceback
 
 from mediaworker import settings
@@ -96,41 +97,48 @@ def get_workers():
     return workers
 
 def main():
+    main_pid = os.getpid()
+
     queue = Queue(-1)
     listener = Process(target=listener_process,
             args=(queue, listener_configurer))
     listener.start()
 
     workers = get_workers()
-    try:
-        while True:
+
+    def terminate(signum, frame):
+        if os.getpid() == main_pid:
+            # Stop workers
             for worker in workers:
                 proc = workers[worker].get('proc')
-                if proc:
-                    if proc.is_alive():
-                        continue
-                    logger.error('%s died', worker)
+                if proc and proc.is_alive():
+                    proc.terminate()
+                    logger.info('stopped %s', worker)
 
-                # Start worker
-                workers[worker]['proc'] = Process(target=worker_process,
-                        args=(queue, worker_configurer, workers[worker]['target']),
-                        name=worker)
-                workers[worker]['proc'].start()
-                logger.info('started %s', worker)
-                time.sleep(1)
+            queue.put_nowait(None)
+            listener.join()
 
-            time.sleep(10)
+        sys.exit(0)
 
-    finally:
-        # Stop workers
+    signal.signal(signal.SIGTERM, terminate)
+
+    while True:
         for worker in workers:
             proc = workers[worker].get('proc')
-            if proc and proc.is_alive():
-                proc.terminate()
-                logger.info('stopped %s', worker)
+            if proc:
+                if proc.is_alive():
+                    continue
+                logger.error('%s died', worker)
 
-        queue.put_nowait(None)
-        listener.join()
+            # Start worker
+            workers[worker]['proc'] = Process(target=worker_process,
+                    args=(queue, worker_configurer, workers[worker]['target']),
+                    name=worker)
+            workers[worker]['proc'].start()
+            logger.info('started %s', worker)
+            time.sleep(1)
+
+        time.sleep(10)
 
 
 if __name__ == '__main__':
