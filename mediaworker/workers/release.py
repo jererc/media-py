@@ -86,6 +86,7 @@ def import_sputnikmusic(age_max):
 
         doc = {
             'type': 'audio',
+            'subtype': 'music',
             'artist': res['artist'],
             'album': res['album'],
             }
@@ -175,7 +176,8 @@ def process_releases():
                         Search().add(res['name'],
                                 category='movies',
                                 mode='once',
-                                langs=SEARCH_LANGS_DEF['movies'])
+                                langs=SEARCH_LANGS_DEF['movies'],
+                                release_id=res['_id'])
                         logger.info('added movies search "%s"', res['name'])
 
                 elif res['subtype'] == 'tv':
@@ -189,7 +191,8 @@ def process_releases():
                         Search().add(query,
                                 category='tv',
                                 mode='inc',
-                                langs=SEARCH_LANGS_DEF['tv'])
+                                langs=SEARCH_LANGS_DEF['tv'],
+                                release_id=res['_id'])
                         logger.info('added tv search "%s"', query)
 
             elif res['type'] == 'audio':
@@ -201,7 +204,8 @@ def process_releases():
                         and res['name'] not in searches.get('music', []):
                     Search().add(res['name'],
                             category='music',
-                            mode='once')
+                            mode='once',
+                            release_id=res['_id'])
                     logger.info('added music search "%s"', res['name'])
 
         Release().update({'_id': res['_id']}, {'$set': {'processed': datetime.utcnow()}}, safe=True)
