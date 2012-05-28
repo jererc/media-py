@@ -185,8 +185,7 @@ class Search(dict):
             MSearch().add(query,
                     category=self.category,
                     mode=self.mode,
-                    langs=self.langs,
-                    release_id=self.get('release_id'))
+                    langs=self.langs)
 
     def validate(self):
         if not self._check_dates():
