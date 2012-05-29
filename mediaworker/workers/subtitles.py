@@ -17,32 +17,32 @@ from mediacore.web.opensubtitles import Opensubtitles, OpensubtitlesError, Downl
 from mediacore.util.media import get_file, get_clean_filename
 
 
-NAME = os.path.basename(__file__)
+NAME = os.path.splitext(os.path.basename(__file__))[0]
 PATH_VIDEO = settings.PATHS_MEDIA_NEW['video']
 OPENSUBTITLES_LANG = 'eng'
-DELTA_SEARCH_MIN = timedelta(hours=6)
+DELTA_SEARCH = timedelta(hours=12)
 LANG_DEF = {
     'eng': 'en',
     'fre': 'fr',
     }
-LANGS = ['en', 'fr']     # priority according to the list index
-SEARCH_LIMIT = 50
-QUOTA_REACHED_DELAY = timedelta(hours=12)
+LANGS = ['en', 'fr']     # priority according to the index
+SEARCH_LIMIT = 20
+DELTA_QUOTA_REACHED = timedelta(hours=12)
 
 
 logger = logging.getLogger(__name__)
 
 
-def get_sub_filename(filename_video, filename_sub, lang):
+def _get_sub_filename(filename_video, filename_sub, lang):
     filename, ext = os.path.splitext(filename_sub)
     return '%s.%s.(%s)%s' % (filename_video, lang, get_clean_filename(filename), ext)
 
-def search_opensubtitles(video_file, name, season, episode, date=None):
+def _search_opensubtitles(video_file, name, season, episode, date=None):
     video = get_file(video_file)
     opensubtitles = Opensubtitles(settings.OPENSUBTITLES_USERNAME, settings.OPENSUBTITLES_PASSWORD)
     try:
         for sub in opensubtitles.results(name, season=season, episode=episode, date=date, lang=OPENSUBTITLES_LANG):
-            filename_sub = get_sub_filename(video.filename, sub['filename'], LANG_DEF[OPENSUBTITLES_LANG])
+            filename_sub = _get_sub_filename(video.filename, sub['filename'], LANG_DEF[OPENSUBTITLES_LANG])
             file_dst = os.path.join(video.path, filename_sub)
             if os.path.exists(file_dst):
                 continue
@@ -61,7 +61,7 @@ def search_opensubtitles(video_file, name, season, episode, date=None):
 
     return True
 
-def update_subtitles(video_file):
+def _update_subtitles(video_file):
     subtitles = []
     video = get_file(video_file)
 
@@ -98,10 +98,11 @@ def search_subtitles():
             'size': {'$gte': 100},
             '$or': [
                 {'last_sub_search': {'$exists': False}},
-                {'last_sub_search': {'$lt': datetime.utcnow() - DELTA_SEARCH_MIN}},
+                {'last_sub_search': {'$lt': datetime.utcnow() - DELTA_SEARCH}},
                 ],
             },
             limit=SEARCH_LIMIT,
+            sort=[('last_sub_search', 1)],
             timeout=False):
         if not os.path.exists(file['file']):
             continue
@@ -123,9 +124,9 @@ def search_subtitles():
 
         logger.info('searching subtitles for "%s" (%s)', info.get('display_name'), os.path.basename(file['file']))
         try:
-            if search_opensubtitles(file['file'], name, season, episode, date):
+            if _search_opensubtitles(file['file'], name, season, episode, date):
                 info_ = {'last_sub_search': datetime.utcnow()}
-                subtitles = update_subtitles(file['file'])
+                subtitles = _update_subtitles(file['file'])
                 if subtitles != file.get('subtitles', []):
                     info_['subtitles'] = subtitles
                 File().update(file['_id'], info=info_)
@@ -137,16 +138,16 @@ def update_quota():
     if not Worker().get_attr(NAME, 'quota_reached'):
         Worker().set_attr(NAME, 'quota_reached', datetime.utcnow())
 
-def check_quota():
-    quota_reached = Worker().get_attr(NAME, 'quota_reached')
-    if not quota_reached or quota_reached < datetime.utcnow() - QUOTA_REACHED_DELAY:
+def validate_quota():
+    res = Worker().get_attr(NAME, 'quota_reached')
+    if not res or res < datetime.utcnow() - DELTA_QUOTA_REACHED:
         return True
 
-@loop(minutes=10)
+@loop(minutes=2)
 @timeout(hours=2)
-@timer
+@timer()
 def main():
-    if check_quota() and Google().accessible:
+    if validate_quota() and Google().accessible:
         search_subtitles()
 
 

@@ -17,9 +17,9 @@ from mediacore.util.util import prefix_dict
 
 
 FILE_SPEC = {'$regex': '^(%s)/' % '|'.join([re.escape(p) for p in settings.PATHS_MEDIA_NEW.values()])}
-UPDATE_RECURRENCE = timedelta(hours=24)
-NO_UPDATE_DELTA = timedelta(days=7)
-UPDATE_LIMIT = 100
+DELTA_UPDATE = timedelta(hours=24)
+DELTA_NO_UPDATE = timedelta(days=7)
+UPDATE_LIMIT = 20
 
 
 logger = logging.getLogger(__name__)
@@ -80,24 +80,26 @@ def _update_extra(type, info):
 def update_extra():
     '''Update the files extra info.
     '''
-    for i in range(UPDATE_LIMIT):
+    for i in range(UPDATE_LIMIT):   # we use find_one since a single update can update multiple files (e.g.: audio)
         file = File().find_one({
-                'file': FILE_SPEC,
-                'type': {'$in': ['video', 'audio']},
-                '$or': [
-                    {'updated': {'$exists': False}},
-                    {'updated': {'$lt': datetime.utcnow() - UPDATE_RECURRENCE}},
-                    ],
-                })
+            'file': FILE_SPEC,
+            'type': {'$in': ['video', 'audio']},
+            '$or': [
+                {'updated': {'$exists': False}},
+                {'updated': {'$lt': datetime.utcnow() - DELTA_UPDATE}},
+                ],
+            },
+            sort=[('updated', 1)])
         if not file:
             break
 
         if not _update_extra(file.get('type'), file.get('info')):
-            File().update(id=file['_id'], info={'updated': datetime.utcnow() + NO_UPDATE_DELTA})
+            # Update date for files which could not be updated
+            File().update(id=file['_id'], info={'updated': datetime.utcnow() + DELTA_NO_UPDATE})
 
-@loop(minutes=10)
+@loop(minutes=2)
 @timeout(hours=1)
-@timer
+@timer()
 def main():
     if Google().accessible:
         update_extra()

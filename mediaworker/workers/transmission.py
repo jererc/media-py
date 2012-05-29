@@ -13,11 +13,11 @@ from mediacore.model.worker import Worker
 from mediacore.util.transmission import Transmission, TransmissionError, TorrentExists
 
 
-NAME = os.path.basename(__file__)
+NAME = os.path.splitext(os.path.basename(__file__))[0]
 PATH_FINISHED = settings.PATHS_FINISHED['transmission']
 PATH_INVALID = settings.PATH_INVALID_DOWNLOAD
 AGE_TORRENT_MAX = timedelta(days=15)
-AGE_CLEAN = timedelta(hours=24)
+DELTA_CLEAN = timedelta(hours=24)
 
 
 logger = logging.getLogger(__name__)
@@ -32,9 +32,14 @@ def process_download(torrent):
 
     return True
 
+def validate_clean():
+    res = Worker().get_attr(NAME, 'cleaned')
+    if not res or res < datetime.utcnow() - DELTA_CLEAN:
+        return True
+
 @loop(30)
 @timeout(minutes=30)
-# @timer
+@timer()
 def main():
     transmission = Transmission()
     if not transmission.logged:
@@ -64,8 +69,7 @@ def main():
                 {'$set': {'processed': datetime.utcnow()}}, safe=True)
 
     # Clean download dir
-    cleaned = Worker().get_attr(NAME, 'cleaned')
-    if not cleaned or cleaned < datetime.utcnow() - AGE_CLEAN:
+    if validate_clean():
         transmission.clean_download_directory()
         Worker().set_attr(NAME, 'cleaned', datetime.utcnow())
 

@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 @loop(minutes=10)
 @timeout(hours=4)
-@timer
+@timer()
 def main():
     for path, recurrence in PATHS_DEF.items():
         res = Path().find_one({'path': path})

@@ -69,7 +69,7 @@ def add_search(band):
 
 @loop(minutes=10)
 @timeout(hours=1)
-@timer
+@timer()
 def main():
     if not Google().accessible:
         return

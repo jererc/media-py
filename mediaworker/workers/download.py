@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 @loop(30)
 @timeout(hours=4)
-# @timer
+@timer()
 def main():
     for path in PATHS_FINISHED.values():
         if not os.path.exists(path):
