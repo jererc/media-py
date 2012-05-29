@@ -1,7 +1,9 @@
 from datetime import datetime
+import re
 
 
 DB_NAME = 'mediaworker'
+
 
 # Data
 PATH_MEDIA_ROOT = '/home/user'
@@ -17,20 +19,40 @@ PATHS_MEDIA_NEW = {
     }
 PATH_TMP = '/tmp'
 
+
 # New media filters
 IMDB_DATE_MIN = datetime.utcnow().year - 1
 IMDB_RATING_MIN = 6.0   # / 10
 SPUTNIKMUSIC_RATING_MIN = 3.5   # / 5
 TVRAGE_STYLES = ['scripted', 'mini-series']     # list of authorized tvshow styles
 
+
+# Search results filters
+re_incl_movies = re.compile(r'\b(br|bd|dvd|hd)rip\b', re.I)
+re_incl_tv = re.compile(r'\b([hp]dtv|dsr(ip)?)\b', re.I)
+re_excl_video = re.compile(r'\b(720|1080)p\b', re.I)
+re_excl_anime = re.compile(r'\b(720|1080)p\b', re.I)
+FILTER_DEF = {    # size ranges in MB, title inclusions and exclusions
+    'anime': {'size_min': 100, 'size_max': 1000, 're_excl': re_excl_anime},
+    'apps': {},
+    'books': {},
+    'games': {},
+    'movies': {'size_min': 500, 'size_max': 2500, 're_incl': re_incl_movies, 're_excl': re_excl_video},
+    'music': {'size_min': 30, 'size_max': 300},
+    'tv': {'size_min': 100, 'size_max': 1000, 're_incl': re_incl_tv, 're_excl': re_excl_video},
+    }
+
+
 # Credentials
 OPENSUBTITLES_USERNAME = ''
 OPENSUBTITLES_PASSWORD = ''
+
 
 # Transmission
 TRANSMISSION_USERNAME = None
 TRANSMISSION_PASSWORD = None
 TRANSMISSION_PORT = 9091
+
 
 # Logging
 LOG_FORMAT = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'

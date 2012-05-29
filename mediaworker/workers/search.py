@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 from datetime import datetime, timedelta
 import logging
+from copy import copy
 
-import pymongo
-
-from mediaworker import env
+from mediaworker import env, settings
 
 from systools.system import loop, timeout, timer
 
@@ -14,59 +13,38 @@ from mediacore.model.result import Result
 from mediacore.web.torrent import results
 from mediacore.web.google import Google
 from mediacore.util.title import Title
-from mediacore.util.util import list_in, in_range
 
 
 DELTA_SEARCH_MIN = {
-    'once': timedelta(hours=24),
+    'once': timedelta(hours=12),
     'inc': timedelta(hours=12),
     'ever': timedelta(hours=24),
     }
 DELTA_IDLE_SEARCH_MIN = timedelta(days=2)
 DELTA_RESULT_MIN = {
     'once': timedelta(hours=24),
-    'inc': timedelta(hours=24),
+    'inc': timedelta(hours=12),
     'ever': timedelta(hours=24),
     }
 DELTA_IDLE = timedelta(days=10)
 DELTA_OBSOLETE = timedelta(days=30)
 DELTA_NEXT_SEASON = timedelta(days=60)
 DELTA_RESULTS_MAX = timedelta(days=120)
-
+SEARCH_LIMIT = 10
 PAGES_MAX = 20
 NB_SEEDS_MIN = {
     'once': 0,
     'inc': 10,
     'ever': 1,
     }
-NB_DOWNLOADS_MAX = 1
-
-CAT_DEF = {     # local categories correspondances
-    'anime': 'video',
-    'apps': None,
-    'books': None,
-    'games': None,
-    'movies': 'video',
-    'music': 'audio',
-    'tv': 'video',
-    }
-SIZE_DEF = {    # size ranges in MB
-    'anime': {'min': 100, 'max': 1000},
-    'apps': {'min': None, 'max': None},
-    'books': {'min': None, 'max': None},
-    'games': {'min': None, 'max': None},
-    'movies': {'min': 600, 'max': 2000},
-    'music': {'min': 40, 'max': 200},
-    'tv': {'min': 100, 'max': 1000},
-    }
-NB_FILES_DEF = {    # min number of matching local files to find
-    'anime': 1,
-    'apps': 1,
-    'books': 1,
-    'games': 1,
-    'movies': 1,
-    'music': 3,
-    'tv': 1,
+FILE_DEF = {     # (file type, min number of matching files)
+    'anime': ('video', 1),
+    'apps': (None, 1),
+    'books': (None, 1),
+    'games': (None, 1),
+    'movies': ('video', 1),
+    'music': ('audio', 3),
+    'tv': ('video', 1),
     }
 
 
@@ -140,36 +118,25 @@ class Search(dict):
         return True
 
     def _search_files(self):
-        files = File().search(self.q, CAT_DEF[self.category])
-        if len(files) >= NB_FILES_DEF[self.category]:
+        file_type, nb_files_min = FILE_DEF[self.category]
+        files = File().search(self.q, file_type)
+        if len(files) >= nb_files_min:
             MSearch().remove(id=self._id)
             logger.info('removed %s search "%s": found %s', self.category, self.q, files[0])
             return True
 
-    def _check_result_dynamic(self, result):
+    def _validate_result(self, result):
         '''Check result dynamic attributes.
         '''
         if result.date and result.date > datetime.utcnow() - DELTA_RESULT_MIN[self.mode]:
             logger.info('filtered "%s" (%s): too recent (%s)', result.title, result.net_name, result.date)
             return False
-        seeds = getattr(result, 'seeds', None)
+
+        seeds = result.get('seeds')
         if seeds is not None and seeds < NB_SEEDS_MIN[self.mode]:
             logger.info('filtered "%s" (%s): not enough seeds (%s)', result.title, result.net_name, seeds)
             return False
-        return True
 
-    def _check_result(self, result):
-        '''Check result fixed attributes.
-        '''
-        if getattr(result, 'private', False):
-            logger.info('filtered "%s" (%s): private tracker', result.title, result.net_name)
-            return False
-        if self.langs and not list_in(self.langs, Title(result.title).langs, all=False):
-            logger.info('filtered "%s" (%s): languages do not match', result.title, result.net_name)
-            return False
-        if result.size is not None and not in_range(result.size, SIZE_DEF[self.category]['min'], SIZE_DEF[self.category]['max']):
-            logger.info('filtered "%s" (%s): size does not match (%s MB)', result.title, result.net_name, result.size)
-            return False
         return True
 
     def _add_next(self, mode):
@@ -215,15 +182,22 @@ class Search(dict):
 
         return True
 
+    def _get_filters(self):
+        res = copy(settings.FILTER_DEF.get(self.category, {}))
+        re_incl = Title(self.q).get_search_re('word3' if self.mode != 'inc' else None)
+        res['re_incl'] = [res.get('re_incl'), re_incl]
+        res['langs'] = self.langs
+        return res
+
+    @timeout(minutes=30)
     def process(self):
         logger.info('processing %s search "%s"', self.category, self.q)
 
-        re_incl_query = Title(self.q).get_search_re('word3' if self.mode != 'inc' else None)
         for result in results(self.q,
                 category=self.category,
                 sort=self.session['sort_results'],
                 pages_max=self.session['pages_max'],
-                re_incl=re_incl_query):
+                **self._get_filters()):
             if not result:
                 self.session['nb_errors'] += 1
                 continue
@@ -231,9 +205,12 @@ class Search(dict):
                 continue
 
             self.session['nb_results'] += 1
-            if not self._check_result_dynamic(result):
+            if not self._validate_result(result):
                 self.session['nb_pending'] += 1
                 continue
+
+            if self.mode == 'inc':
+                self._add_next('episode')
 
             doc = {
                 'hash': result.hash,
@@ -244,20 +221,11 @@ class Search(dict):
                 'created': datetime.utcnow(),
                 'processed': False,
                 }
-
-            if not self._check_result(result):
-                doc['processed'] = datetime.utcnow()
-                Result().insert(doc)
-                continue
-
-            if self.mode == 'inc':
-                self._add_next('episode')
-
             Result().insert(doc)
             self.session['nb_downloads'] += 1
             logger.info('found "%s" on %s', result.title, result.net_name)
 
-            if self.mode != 'ever' and self.session['nb_downloads'] >= NB_DOWNLOADS_MAX:
+            if self.mode != 'ever':
                 break
 
     def save(self):
@@ -276,7 +244,9 @@ class Search(dict):
 
 
 def process():
-    for res in MSearch().find(sort=[('last_search', pymongo.ASCENDING)],
+    for res in MSearch().find(
+            sort=[('session.last_search', 1)],
+            limit=SEARCH_LIMIT,
             timeout=False):
         search = Search(res)
         if search.validate():
@@ -285,7 +255,7 @@ def process():
 
 @loop(60)
 @timeout(hours=2)
-@timer
+@timer()
 def main():
     if Google().accessible:
         process()
