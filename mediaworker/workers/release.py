@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import os.path
 from datetime import datetime, timedelta
 import logging
 
@@ -9,6 +10,7 @@ from systools.system import loop, timeout, timer
 from mediacore.model.release import Release
 from mediacore.model.search import Search
 from mediacore.model.file import File
+from mediacore.model.worker import Worker
 from mediacore.web.google import Google
 from mediacore.web.imdb import Imdb
 from mediacore.web.vcdquality import Vcdquality
@@ -19,11 +21,13 @@ from mediacore.util.title import Title, clean
 from mediacore.util.util import prefix_dict
 
 
+NAME = os.path.splitext(os.path.basename(__file__))[0]
+DELTA_IMPORT = timedelta(hours=2)
+DELTA_UPDATE = timedelta(hours=24)
 VCDQUALITY_PAGES_MAX = 10
 TV_EPISODE_MAX = 20  # maximum episode number of new releases
-RELEASE_AGE_MAX = timedelta(days=90)
-UPDATE_RECURRENCE = timedelta(hours=24)
-UPDATE_LIMIT = 100
+DELTA_RELEASE = timedelta(days=90)
+UPDATE_LIMIT = 20
 SEARCH_LANGS_DEF = {
     'movies': ['en', 'fr'],
     'tv': ['en'],
@@ -44,8 +48,8 @@ def import_vcdquality(pages_max, age_max):
 
         doc = {
             'type': 'video',
-            'subtype': 'movies',
             'name': clean(res['release'], 7),
+            'info': {'subtype': 'movies'},
             }
         if not Release().find_one(doc):
             doc.update({
@@ -65,13 +69,13 @@ def import_tvrage(age_max):
 
         doc = {
             'type': 'video',
-            'subtype': 'tv',
             'name': clean(res['name'], 7),
+            'info': {'subtype': 'tv'},
             }
         if not Release().find_one(doc):
             doc.update({
                     'url': res['url'],
-                    'date': datetime.utcnow(),  # the date we discovered the show
+                    'date': datetime.utcnow(),  # release date is the date we discovered the show
                     'processed': False,
                     })
             Release().insert(doc, safe=True)
@@ -86,9 +90,9 @@ def import_sputnikmusic(age_max):
 
         doc = {
             'type': 'audio',
-            'subtype': 'music',
             'artist': res['artist'],
             'album': res['album'],
+            'info': {'subtype': 'music'},
             }
         if not Release().find_one(doc):
             doc.update({
@@ -99,18 +103,19 @@ def import_sputnikmusic(age_max):
             Release().insert(doc, safe=True)
             logger.info('added audio release "%s"', doc['name'])
 
-def get_extra(release):
+def _get_extra(release):
     res = {}
+    subtype = release['info'].get('subtype')
 
     if release['type'] == 'video':
 
-        if release['subtype'] == 'movies':
+        if subtype == 'movies':
             date = Title(release['release']).date
             info = Imdb().get_info(release['name'], date)
             if info:
                 res.update(prefix_dict(info, 'imdb_'))
 
-        elif release['subtype'] == 'tv':
+        elif subtype == 'tv':
             date = release['date'].year
             info = Tvrage().get_info(release['url'])
             if info:
@@ -135,22 +140,21 @@ def get_extra(release):
 def update_extra():
     '''Update the releases extra info.
     '''
-    for i in range(UPDATE_LIMIT):
-        release = Release().find_one({
+    for release in Release().find({
             '$or': [
                 {'updated': {'$exists': False}},
-                {'updated': {'$lt': datetime.utcnow() - UPDATE_RECURRENCE}},
+                {'updated': {'$lt': datetime.utcnow() - DELTA_UPDATE}},
                 ],
-            })
-        if not release:
-            break
-
+            },
+            limit=UPDATE_LIMIT,
+            sort=[('updated', 1)],
+            timeout=False):
         Release().update({'_id': release['_id']}, {'$set': {
-                'extra': get_extra(release),
+                'extra': _get_extra(release),
                 'updated': datetime.utcnow(),
                 }}, safe=True)
-        subtype_str = '/%s' % release['subtype'] if release.get('subtype') else ''
-        logger.info('updated %s%s release "%s"', release['type'], subtype_str, release['name'])
+
+        logger.info('updated %s/%s release "%s"', release['type'], release['info'].get('subtype'), release['name'])
 
 def process_releases():
     for res in Release().find({
@@ -159,43 +163,42 @@ def process_releases():
             }):
         if not release_exists(res):
             searches = Search().list_names()
+            subtype = res['info'].get('subtype')
 
-            if res['type'] == 'video':
+            if subtype == 'movies':
+                rating = res['extra'].get('imdb_rating')
+                if rating is None:
+                    continue
+                date = res['extra'].get('imdb_date')
+                if not date:
+                    continue
 
-                if res['subtype'] == 'movies':
-                    rating = res['extra'].get('imdb_rating')
-                    if rating is None:
-                        continue
-                    date = res['extra'].get('imdb_date')
-                    if not date:
-                        continue
+                if rating >= settings.IMDB_RATING_MIN \
+                        and date >= settings.IMDB_DATE_MIN \
+                        and res['name'] not in searches.get('movies', []):
+                    Search().add(res['name'],
+                            category='movies',
+                            mode='once',
+                            langs=SEARCH_LANGS_DEF['movies'],
+                            release_id=res['_id'])
+                    logger.info('added movies search "%s"', res['name'])
 
-                    if rating >= settings.IMDB_RATING_MIN \
-                            and date >= settings.IMDB_DATE_MIN \
-                            and res['name'] not in searches.get('movies', []):
-                        Search().add(res['name'],
-                                category='movies',
-                                mode='once',
-                                langs=SEARCH_LANGS_DEF['movies'],
-                                release_id=res['_id'])
-                        logger.info('added movies search "%s"', res['name'])
+            elif subtype == 'tv':
+                style = res['extra'].get('tvrage_style')
+                if style is None:
+                    continue
 
-                elif res['subtype'] == 'tv':
-                    style = res['extra'].get('tvrage_style')
-                    if style is None:
-                        continue
+                if style in settings.TVRAGE_STYLES \
+                        and res['name'] not in searches.get('tv', []):
+                    query = '%s 1x01' % res['name']
+                    Search().add(query,
+                            category='tv',
+                            mode='inc',
+                            langs=SEARCH_LANGS_DEF['tv'],
+                            release_id=res['_id'])
+                    logger.info('added tv search "%s"', query)
 
-                    if style in settings.TVRAGE_STYLES \
-                            and res['name'] not in searches.get('tv', []):
-                        query = '%s 1x01' % res['name']
-                        Search().add(query,
-                                category='tv',
-                                mode='inc',
-                                langs=SEARCH_LANGS_DEF['tv'],
-                                release_id=res['_id'])
-                        logger.info('added tv search "%s"', query)
-
-            elif res['type'] == 'audio':
+            elif subtype == 'music':
                 rating = res['extra'].get('sputnikmusic_rating')
                 if rating is None:
                     continue
@@ -220,16 +223,25 @@ def artist_exists(artist):
     if res.count() >= NB_FILES_MIN['audio']:
         return True
 
-@loop(minutes=30)
+def validate_import():
+    res = Worker().get_attr(NAME, 'imported')
+    if not res or res < datetime.utcnow() - DELTA_IMPORT:
+        return True
+
+@loop(minutes=2)
 @timeout(hours=2)
-@timer
+@timer()
 def main():
     if Google().accessible:
-        import_vcdquality(VCDQUALITY_PAGES_MAX, RELEASE_AGE_MAX)
-        import_tvrage(RELEASE_AGE_MAX)
-        import_sputnikmusic(RELEASE_AGE_MAX)
 
-        Release().remove({'date': {'$lt': datetime.utcnow() - RELEASE_AGE_MAX}}, safe=True)
+        if validate_import():
+            import_vcdquality(VCDQUALITY_PAGES_MAX, DELTA_RELEASE)
+            import_tvrage(DELTA_RELEASE)
+            import_sputnikmusic(DELTA_RELEASE)
+
+            Worker().set_attr(NAME, 'imported', datetime.utcnow())
+
+            Release().remove({'date': {'$lt': datetime.utcnow() - DELTA_RELEASE}}, safe=True)
 
         update_extra()
 
