@@ -212,16 +212,15 @@ class Search(dict):
             if self.mode == 'inc':
                 self._add_next('episode')
 
-            doc = {
-                'hash': result.hash,
-                'title': result.title,
-                'net_name': result.net_name,
-                'url_magnet': result.url_magnet,
-                'search_id': self._id,
-                'created': datetime.utcnow(),
-                'processed': False,
-                }
-            Result().insert(doc)
+            Result().insert({
+                    'hash': result.hash,
+                    'title': result.title,
+                    'net_name': result.net_name,
+                    'url_magnet': result.url_magnet,
+                    'search_id': self._id,
+                    'created': datetime.utcnow(),
+                    'processed': False,
+                    }, safe=True)
             self.session['nb_downloads'] += 1
             logger.info('found "%s" on %s', result.title, result.net_name)
 

@@ -82,14 +82,14 @@ def update_extra():
     '''
     for i in range(UPDATE_LIMIT):   # we use find_one since a single update can update multiple files (e.g.: audio)
         file = File().find_one({
-            'file': FILE_SPEC,
-            'type': {'$in': ['video', 'audio']},
-            '$or': [
-                {'updated': {'$exists': False}},
-                {'updated': {'$lt': datetime.utcnow() - DELTA_UPDATE}},
-                ],
-            },
-            sort=[('updated', 1)])
+                'file': FILE_SPEC,
+                'type': {'$in': ['video', 'audio']},
+                '$or': [
+                    {'updated': {'$exists': False}},
+                    {'updated': {'$lt': datetime.utcnow() - DELTA_UPDATE}},
+                    ],
+                },
+                sort=[('updated', 1)])
         if not file:
             break
 
