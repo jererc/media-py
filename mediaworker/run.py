@@ -116,7 +116,8 @@ def main():
                     logger.info('stopped %s', worker)
 
             queue.put_nowait(None)
-            listener.join()
+            # listener.join()
+            listener.terminate()
 
         sys.exit(0)
 
