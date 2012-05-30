@@ -24,13 +24,14 @@ from mediacore.util.util import prefix_dict
 NAME = os.path.splitext(os.path.basename(__file__))[0]
 DELTA_IMPORT = timedelta(hours=2)
 DELTA_UPDATE = timedelta(hours=24)
-VCDQUALITY_PAGES_MAX = 10
-TV_EPISODE_MAX = 20  # maximum episode number of new releases
 DELTA_RELEASE = timedelta(days=90)
+VCDQUALITY_PAGES_MAX = 10
+TV_EPISODE_MAX = 20  # maximum episode number for new releases
 UPDATE_LIMIT = 20
 SEARCH_LANGS_DEF = {
     'movies': ['en', 'fr'],
     'tv': ['en'],
+    'music': None,
     }
 NB_FILES_MIN = {
     'video': 1,
@@ -46,19 +47,21 @@ def import_vcdquality(pages_max, age_max):
         if res['date'] < datetime.utcnow() - age_max:
             continue
 
-        doc = {
-            'type': 'video',
-            'name': clean(res['release'], 7),
-            'info': {'subtype': 'movies'},
-            }
-        if not Release().find_one(doc):
-            doc.update({
+        name = clean(res['release'], 7)
+        if not Release().find_one({
+                'name': name,
+                'type': 'video',
+                'info.subtype': 'movies',
+                }):
+            Release().insert({
+                    'name': name,
+                    'type': 'video',
+                    'info': {'subtype': 'movies'},
                     'release': res['release'],
                     'date': res['date'],
                     'processed': False,
-                    })
-            Release().insert(doc, safe=True)
-            logger.info('added video/movies release "%s"', doc['name'])
+                    }, safe=True)
+            logger.info('added video/movies release "%s"', name)
 
 def import_tvrage(age_max):
     for res in Tvrage().scheduled_shows():
@@ -67,19 +70,21 @@ def import_tvrage(age_max):
         if res['season'] > 1 or res['episode'] > TV_EPISODE_MAX:
             continue
 
-        doc = {
-            'type': 'video',
-            'name': clean(res['name'], 7),
-            'info': {'subtype': 'tv'},
-            }
-        if not Release().find_one(doc):
-            doc.update({
+        name = clean(res['name'], 7)
+        if not Release().find_one({
+                'name': name,
+                'type': 'video',
+                'info.subtype': 'tv',
+                }):
+            Release().insert({
+                    'name': name,
+                    'type': 'video',
+                    'info': {'subtype': 'tv'},
                     'url': res['url'],
                     'date': datetime.utcnow(),  # release date is the date we discovered the show
                     'processed': False,
-                    })
-            Release().insert(doc, safe=True)
-            logger.info('added video/tv release "%s"', doc['name'])
+                    }, safe=True)
+            logger.info('added video/tv release "%s"', name)
 
 def import_sputnikmusic(age_max):
     for res in Sputnikmusic().reviews():
@@ -88,20 +93,23 @@ def import_sputnikmusic(age_max):
         if not res.get('date') or res['date'] < datetime.utcnow() - age_max:
             continue
 
-        doc = {
-            'type': 'audio',
-            'artist': res['artist'],
-            'album': res['album'],
-            'info': {'subtype': 'music'},
-            }
-        if not Release().find_one(doc):
-            doc.update({
-                    'name': '%s %s' % (res['artist'], res['album']),
+        name = '%s %s' % (res['artist'], res['album'])
+        if not Release().find_one({
+                'artist': res['artist'],
+                'album': res['album'],
+                'type': 'audio',
+                'info.subtype': 'music',
+                }):
+            Release().insert({
+                    'name': name,
+                    'artist': res['artist'],
+                    'album': res['album'],
+                    'type': 'audio',
+                    'info': {'subtype': 'music'},
                     'date': res['date'],
                     'processed': False,
-                    })
-            Release().insert(doc, safe=True)
-            logger.info('added audio release "%s"', doc['name'])
+                    }, safe=True)
+            logger.info('added audio release "%s"', name)
 
 def _get_extra(release):
     res = {}
@@ -154,64 +162,68 @@ def update_extra():
                 'updated': datetime.utcnow(),
                 }}, safe=True)
 
-        logger.info('updated %s/%s release "%s"', release['type'], release['info'].get('subtype'), release['name'])
+        logger.info('updated %s release "%s"', release['info'].get('subtype'), release['name'])
+
+def add_search(release):
+    if release_exists(release):
+        return
+
+    category = release['info'].get('subtype')
+    if release['name'] in Search().list_names().get(category, []):
+        return
+
+    if category == 'tv':
+        query = '%s 1x01' % release['name']
+        mode = 'inc'
+    else:
+        query = release['name']
+        mode = 'once'
+
+    Search().add(query,
+            category=category,
+            mode=mode,
+            langs=SEARCH_LANGS_DEF[category],
+            release_id=release['_id'])
+
+    logger.info('added %s search "%s"', category, query)
 
 def process_releases():
-    for res in Release().find({
+    for release in Release().find({
             'processed': False,
             'updated': {'$exists': True},
             }):
-        if not release_exists(res):
-            searches = Search().list_names()
-            subtype = res['info'].get('subtype')
+        subtype = release['info'].get('subtype')
 
-            if subtype == 'movies':
-                rating = res['extra'].get('imdb_rating')
-                if rating is None:
-                    continue
-                date = res['extra'].get('imdb_date')
-                if not date:
-                    continue
+        if subtype == 'movies':
+            rating = release['extra'].get('imdb_rating')
+            if rating is None:
+                continue
+            date = release['extra'].get('imdb_date')
+            if not date:
+                continue
 
-                if rating >= settings.IMDB_RATING_MIN \
-                        and date >= settings.IMDB_DATE_MIN \
-                        and res['name'] not in searches.get('movies', []):
-                    Search().add(res['name'],
-                            category='movies',
-                            mode='once',
-                            langs=SEARCH_LANGS_DEF['movies'],
-                            release_id=res['_id'])
-                    logger.info('added movies search "%s"', res['name'])
+            if rating >= settings.IMDB_RATING_MIN \
+                    and date >= settings.IMDB_DATE_MIN:
+                add_search(release)
 
-            elif subtype == 'tv':
-                style = res['extra'].get('tvrage_style')
-                if style is None:
-                    continue
+        elif subtype == 'tv':
+            style = release['extra'].get('tvrage_style')
+            if style is None:
+                continue
 
-                if style in settings.TVRAGE_STYLES \
-                        and res['name'] not in searches.get('tv', []):
-                    query = '%s 1x01' % res['name']
-                    Search().add(query,
-                            category='tv',
-                            mode='inc',
-                            langs=SEARCH_LANGS_DEF['tv'],
-                            release_id=res['_id'])
-                    logger.info('added tv search "%s"', query)
+            if style in settings.TVRAGE_STYLES:
+                add_search(release)
 
-            elif subtype == 'music':
-                rating = res['extra'].get('sputnikmusic_rating')
-                if rating is None:
-                    continue
+        elif subtype == 'music':
+            rating = release['extra'].get('sputnikmusic_rating')
+            if rating is None:
+                continue
 
-                if rating >= settings.SPUTNIKMUSIC_RATING_MIN or artist_exists(res['artist']) \
-                        and res['name'] not in searches.get('music', []):
-                    Search().add(res['name'],
-                            category='music',
-                            mode='once',
-                            release_id=res['_id'])
-                    logger.info('added music search "%s"', res['name'])
+            if rating >= settings.SPUTNIKMUSIC_RATING_MIN \
+                    or artist_exists(release['artist']):
+                add_search(release)
 
-        Release().update({'_id': res['_id']}, {'$set': {'processed': datetime.utcnow()}}, safe=True)
+        Release().update({'_id': release['_id']}, {'$set': {'processed': datetime.utcnow()}}, safe=True)
 
 def release_exists(release):
     files = File().search(release['name'], release['type'])
