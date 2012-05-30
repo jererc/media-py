@@ -17,7 +17,7 @@ from mediacore.util.util import randomize
 
 
 NB_TRACKS_MIN = 5
-SEARCHES_COUNT = 100
+SEARCHES_COUNT = 500
 
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,10 @@ def add_search(band):
     if albums:
         for album in albums:
             q = clean('%s %s' % (band, album['name']), 1)
-            Search().add(q, category='music', mode='once')
+            Search().add(q,
+                    category='music',
+                    mode='once',
+                    url_info=album.get('url'))
             logger.info('added music search "%s"', q)
         return True
 
