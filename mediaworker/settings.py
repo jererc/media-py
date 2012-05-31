@@ -20,11 +20,11 @@ PATHS_MEDIA_NEW = {
 PATH_TMP = '/tmp'
 
 
-# New media filters
-IMDB_DATE_MIN = datetime.utcnow().year - 1
-IMDB_RATING_MIN = 6.0   # / 10
-SPUTNIKMUSIC_RATING_MIN = 3.5   # / 5
-TVRAGE_STYLES = ['scripted', 'mini-series']     # list of authorized tvshow styles
+# Releases filters
+IMDB_DATE_MIN = datetime.utcnow().year - 1  # greater or equal
+IMDB_RATING_MIN = 6.0   # / 10, greater or equal
+SPUTNIKMUSIC_RATING_MIN = 3.5   # / 5, greater or equal
+TVRAGE_STYLES = ['scripted', 'mini-series']
 
 
 # Search results filters

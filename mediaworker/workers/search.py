@@ -102,7 +102,7 @@ class Search(dict):
         else:
             return self.__delitem__(attr_name)
 
-    def _check_dates(self):
+    def _validate_dates(self):
         now = datetime.utcnow()
 
         if self.session['last_search'] and self.session['last_search'] > now - DELTA_SEARCH_MIN[self.mode]:
@@ -148,14 +148,15 @@ class Search(dict):
         elif mode == 'season':
             query = MSearch().get_next_season(self.q)
 
-        if query and not MSearch().get(q=query):
+        if query and not MSearch().get(q=query, category=self.category):
             MSearch().add(query,
                     category=self.category,
                     mode=self.mode,
-                    langs=self.langs)
+                    langs=self.langs,
+                    url_info=self.get('url_info'))
 
     def validate(self):
-        if not self._check_dates():
+        if not self._validate_dates():
             return False
         if self.mode == 'ever':
             return True
@@ -212,15 +213,8 @@ class Search(dict):
             if self.mode == 'inc':
                 self._add_next('episode')
 
-            Result().insert({
-                    'hash': result.hash,
-                    'title': result.title,
-                    'net_name': result.net_name,
-                    'url_magnet': result.url_magnet,
-                    'search_id': self._id,
-                    'created': datetime.utcnow(),
-                    'processed': False,
-                    }, safe=True)
+            result['search_id'] = self._id
+            Result().insert(result, safe=True)
             self.session['nb_downloads'] += 1
             logger.info('found "%s" on %s', result.title, result.net_name)
 

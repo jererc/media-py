@@ -119,7 +119,7 @@ def _get_extra(release):
 
         if subtype == 'movies':
             date = Title(release['release']).date
-            info = Imdb().get_info(release['name'], date)
+            info = Imdb().get_info(release['name'], year=date)
             if info:
                 res.update(prefix_dict(info, 'imdb_'))
 

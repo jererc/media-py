@@ -46,13 +46,13 @@ def _update_extra(type, info):
             extra.update(prefix_dict(res, 'youtube_'))
 
         if info.get('subtype') == 'movies':
-            res = Imdb().get_info(info['full_name'], info.get('date'))
+            res = Imdb().get_info(info['full_name'], year=info.get('date'))
             prefix = 'imdb_'
         else:
             res = Tvrage().get_info(info['name'])
             prefix = 'tvrage_'
             if not res:
-                res = Imdb().get_info(info['full_name'], info.get('date'))
+                res = Imdb().get_info(info['full_name'], year=info.get('date'))
                 prefix = 'imdb_'
         if res:
             extra.update(prefix_dict(res, prefix))
