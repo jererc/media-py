@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import re
 from datetime import datetime, timedelta
+from operator import itemgetter
 import logging
 
 from mediaworker import env
@@ -17,9 +18,12 @@ from mediacore.util.title import clean
 from mediacore.util.util import randomize
 
 
-NB_TRACKS_MIN = 5
-MOVIES_SEARCH_LANGS = ['en', 'fr']
-HISTORY_LIMIT = 500
+NB_TRACKS_MIN = 3
+HISTORY_LIMIT = 100
+SEARCH_LANGS = {
+    'movies': ['en', 'fr'],
+    'music': None,
+    }
 
 
 logger = logging.getLogger(__name__)
@@ -48,8 +52,8 @@ def get_bands(paths=None):
     '''Get a list of music bands.
     '''
     spec = {
-        'info.artist': {'$nin': ['', 'va', 'various']},
         'type': 'audio',
+        'info.artist': {'$nin': ['', 'va', 'various']},
         }
     if paths:
         if not isinstance(paths, (tuple, list)):
@@ -82,40 +86,24 @@ def movie_exists(movie):
             }):
         return True
 
-def band_exists(band):
+def album_exists(band, album):
     res = File().find({
             'type': 'audio',
             'info.artist': clean(band, 1),
+            'info.album': clean(album, 1),
             }).count()
     if res >= NB_TRACKS_MIN:
         return True
 
-def add_movies_search(movie):
-    '''Add a movies search.
-    '''
-    query = clean(movie['title'], 1)
-    if query and not Search().get(q=query, category='movies'):
+def add_search(query, category, url_info):
+    query = clean(query, 1)
+    if query and not Search().get(q=query, category=category):
         Search().add(query,
-                category='movies',
+                category=category,
                 mode='once',
-                langs=MOVIES_SEARCH_LANGS,
-                url_info=movie.get('url'))
-        logger.info('added movies search "%s"', query)
-        return True
-
-def add_music_search(band):
-    '''Add a search for each band album.
-    '''
-    albums = get_band_info(band).get('albums')
-    if albums:
-        for album in albums:
-            query = clean('%s %s' % (band, album['name']), 1)
-            if query and not Search().get(q=query, category='music'):
-                Search().add(query,
-                        category='music',
-                        mode='once',
-                        url_info=album.get('url'))
-                logger.info('added music search "%s"', query)
+                langs=SEARCH_LANGS[category],
+                url_info=url_info)
+        logger.info('added %s search "%s"', category, query)
         return True
 
 def process_movies(search):
@@ -124,14 +112,14 @@ def process_movies(search):
 
         info = get_director_info(director)
         for movie in info['titles']:
+
             history = search.get('history', [])
             if movie['title'] in history:
                 continue
             if movie_exists(movie['title']):
                 continue
 
-            # Add search
-            if add_movies_search(movie):
+            if add_search(movie['title'], 'movies', movie['url']):
                 history.insert(0, movie['title'])
                 MediaFinder().update({'_id': search['_id']}, {'$set': {
                         'processed': datetime.utcnow(),
@@ -144,22 +132,27 @@ def process_music(search):
     for band in randomize(get_bands(search['paths'])):
         logger.info('searching similar bands for "%s"', band)
 
-        for similar_band in get_band_info(band).get('similar_bands', []):
-            history = search.get('history', [])
-            if similar_band in history:
-                continue
-            if band_exists(similar_band):
-                continue
+        for similar_band in randomize(get_band_info(band).get('similar_bands', [])):
 
-            # Add search
-            if add_music_search(similar_band):
-                history.insert(0, similar_band)
-                MediaFinder().update({'_id': search['_id']}, {'$set': {
-                        'processed': datetime.utcnow(),
-                        'history': history[:HISTORY_LIMIT],
-                        }},
-                        safe=True)
-                return
+            # Loop similar band albums by reversed rating order
+            albums = get_band_info(similar_band).get('albums', [])
+            for album in sorted(albums, key=itemgetter('rating'), reverse=True):
+                name = '%s - %s' % (similar_band, album['name'])
+
+                history = search.get('history', [])
+                if name in history:
+                    continue
+                if album_exists(similar_band, album['name']):
+                    continue
+
+                if add_search(name, 'music', album['url']):
+                    history.insert(0, name)
+                    MediaFinder().update({'_id': search['_id']}, {'$set': {
+                            'processed': datetime.utcnow(),
+                            'history': history[:HISTORY_LIMIT],
+                            }},
+                            safe=True)
+                    return
 
 @loop(minutes=10)
 @timeout(hours=1)
