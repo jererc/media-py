@@ -44,7 +44,7 @@ def get_directors(paths=None):
     directors = []
     for res in File().find(spec):
         for director in res['extra']['imdb_director']:
-            if not director in directors:
+            if director not in directors:
                 directors.append(director)
     return directors
 

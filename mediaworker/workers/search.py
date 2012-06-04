@@ -191,6 +191,7 @@ class Search(dict):
         return res
 
     @timeout(minutes=30)
+    @timer(300)
     def process(self):
         logger.info('processing %s search "%s"', self.category, self.q)
 
