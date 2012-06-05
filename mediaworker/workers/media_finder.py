@@ -68,16 +68,10 @@ def get_bands(paths=None):
     return [k for k, v in bands.items() if v > NB_TRACKS_MIN]
 
 def get_director_info(director):
-    info = Imdb().get_info(director, type='name')
-    if not info:
-        return {}
-    return info
+    return Imdb().get_info(director, type='name') or {}
 
 def get_band_info(band):
-    info = Sputnikmusic().get_info(band)
-    if not info:
-        return {}
-    return info
+    return Sputnikmusic().get_info(band) or {}
 
 def movie_exists(movie):
     if File().find_one({
@@ -110,9 +104,7 @@ def process_movies(search):
     for director in randomize(get_directors(search['paths'])):
         logger.info('searching movies from director "%s"', director)
 
-        info = get_director_info(director)
-        for movie in info['titles']:
-
+        for movie in get_director_info(director).get('titles', []):
             history = search.get('history', [])
             if movie['title'] in history:
                 continue
