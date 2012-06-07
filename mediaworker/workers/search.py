@@ -5,7 +5,7 @@ from copy import copy
 
 from mediaworker import env, settings
 
-from systools.system import loop, timeout, timer
+from systools.system import loop, timeout, timer, dotdict
 
 from mediacore.model.search import Search as MSearch
 from mediacore.model.file import File
@@ -51,12 +51,14 @@ FILE_DEF = {     # (file type, min number of matching files)
 logger = logging.getLogger(__name__)
 
 
-class Search(dict):
+class Search(dotdict):
     def __init__(self, doc):
-        doc['mode'] = doc.get('mode', 'once')
-        doc['langs'] = doc.get('langs', [])
+        super(Search, self).__init__(doc)
 
-        session = doc.get('session', {})
+        self.mode = self.get('mode', 'once')
+        self.langs = self.get('langs', [])
+
+        session = self.get('session', {})
 
         if session.get('nb_downloads') == 0 \
                 and session.get('nb_errors') == 0 \
@@ -67,7 +69,7 @@ class Search(dict):
             sort_results = 'seeds'
             pages_max = PAGES_MAX
 
-        doc['session'] = {
+        self.session = {
             'first_search': session.get('first_search'),
             'last_search': session.get('last_search'),
             'last_result': session.get('last_result'),
@@ -79,28 +81,6 @@ class Search(dict):
             'nb_downloads': 0,
             'nb_errors': 0,
             }
-
-        super(Search, self).__init__(doc)
-
-    __getattr__ = dict.__getitem__
-
-    def __setattr__(self, attr_name, value):
-        if hasattr(getattr(self.__class__, attr_name, None), '__set__'):
-            return object.__setattr__(self, attr_name, value)
-        else:
-            return self.__setitem__(attr_name, value)
-
-    def __str__(self):
-        return '%s(%s)' % (self.__class__.__name__, dict(self))
-
-    def __repr__(self):
-        return self.__str__()
-
-    def __delattr__(self, attr_name):
-        if attr_name.startswith('_'):
-            return object.__delattr__(self, attr_name)
-        else:
-            return self.__delitem__(attr_name)
 
     def _validate_dates(self):
         now = datetime.utcnow()
