@@ -1,1 +1,32 @@
 The media project worker.
+
+
+Subprocesses:
+
+- download.py:
+    unpack, clean and sort downloaded media
+
+- extra.py:
+    fetch and update local files metadata
+
+- file.py:
+    manage local files
+
+- media_finder.py:
+    find new media from the files metadata (movies directors, music similar bands), and add new searches
+
+- release.py:
+    fetch new releases from the web (vcdquality releases, tvrage schedule, sputnikmusic reviews), and add new searches for validated releases
+
+- search.py:
+    process and manage the searches, add new searches when required (e.g.: tv episodes)
+
+- subtitles.py:
+    fetch and manage subtitles for video files
+
+- transmission.py:
+    manage transmission downloads
+
+
+Start the worker:
+./mediaworker/run.py
