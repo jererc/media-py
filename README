@@ -1,31 +1,17 @@
 The media project worker.
 
 
-Subprocesses:
+Features:
 
-- download.py:
-    unpack, clean and sort downloaded media
-
-- extra.py:
-    fetch and update local files metadata
-
-- file.py:
-    manage local files
-
-- media_finder.py:
-    find new media from the files metadata (movies directors, music similar bands), and add new searches
-
-- release.py:
-    fetch new releases from the web (vcdquality releases, tvrage schedule, sputnikmusic reviews), and add new searches for validated releases
-
-- search.py:
-    process and manage the searches, add new searches when required (e.g.: tv episodes)
-
-- subtitles.py:
-    fetch and manage subtitles for video files
-
-- transmission.py:
-    manage transmission downloads
+- asynchronously search for torrents from multiple sites
+- search for tv/anime next episodes/seasons
+- fetch new releases from web sources (vcdquality releases, tvrage schedule, sputnikmusic reviews)
+- search for new media which match releases filters (imdb rating, tvrage style, sputnikmusic rating)
+- search for new media from the local media metadata (movies directors, music similar bands)
+- fetch subtitles for local video files
+- unpack, clean and sort downloaded media into the media type based directories
+- update local files metadata from web sources (imdb, tvrage, sputnikmusic)
+- retrieve trailers and audio tracks for local media and new releases
 
 
 Start the worker:
