@@ -16,21 +16,22 @@ from mediacore.util.transmission import Transmission, TransmissionError, Torrent
 NAME = os.path.splitext(os.path.basename(__file__))[0]
 PATH_FINISHED = settings.PATHS_FINISHED['transmission']
 PATH_INVALID = settings.PATH_INVALID_DOWNLOAD
-DELTA_TORRENT_OBSOLETE = timedelta(days=15)
+DELTA_TORRENT_ACTIVE = timedelta(days=4)
+DELTA_TORRENT_ADDED = timedelta(days=15)
 DELTA_CLEAN = timedelta(hours=24)
 
 
 logger = logging.getLogger(__name__)
 
 
-def process_download(torrent):
-    # Remove search
-    search = Search().find_one({'hashes': torrent['hash'], 'mode': 'once'})
-    if search:
-        Search().remove(id=search['_id'])
-        logger.info('removed %s search "%s": download finished', search['category'], search['q'])
+# def process_download(torrent):
+#     # Remove search
+#     search = Search().find_one({'hashes': torrent['hash'], 'mode': 'once'})
+#     if search:
+#         Search().remove(id=search['_id'])
+#         logger.info('removed %s search "%s": download finished', search['category'], search['q'])
 
-    return True
+#     return True
 
 def validate_clean():
     res = Worker().get_attr(NAME, 'cleaned')
@@ -41,13 +42,18 @@ def validate_clean():
 @timeout(minutes=30)
 @timer()
 def main():
-    transmission = Transmission()
+    transmission = Transmission(
+            host=settings.TRANSMISSION_HOST,
+            port=settings.TRANSMISSION_PORT,
+            username=settings.TRANSMISSION_USERNAME,
+            password=settings.TRANSMISSION_PASSWORD)
     if not transmission.logged:
         return
 
     transmission.watch(PATH_FINISHED,
             dst_invalid=PATH_INVALID,
-            age_max=DELTA_TORRENT_OBSOLETE)
+            delta_active=DELTA_TORRENT_ACTIVE,
+            delta_added=DELTA_TORRENT_ADDED)
 
     # Add new torrents
     for res in Result().find({
