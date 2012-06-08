@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from operator import itemgetter
 import logging
 
-from mediaworker import env
+from mediaworker import env, settings
 
 from systools.system import loop, timeout, timer
 
@@ -29,26 +29,30 @@ SEARCH_LANGS = {
 logger = logging.getLogger(__name__)
 
 
-def get_directors(paths=None):
-    '''Get a list of movies directors.
+def get_movies_names(paths=None):
+    '''Get a list of movies directors and actors.
     '''
     spec = {
         'type': 'video',
-        'extra.imdb_director': {'$exists': True},
+        '$or': [
+            {'extra.imdb_director': {'$exists': True}},
+            {'extra.imdb_stars': {'$exists': True}},
+            ],
         }
     if paths:
         if not isinstance(paths, (tuple, list)):
             paths = [paths]
         spec['file'] = {'$regex': '^(%s)/' % '|'.join([re.escape(p) for p in paths])}
 
-    directors = []
+    names = []
     for res in File().find(spec):
-        for director in res['extra']['imdb_director']:
-            if director not in directors:
-                directors.append(director)
-    return directors
+        for name_type in ('imdb_director', 'imdb_stars'):
+            for name in res['extra'].get(name_type, []):
+                if name not in names:
+                    names.append(name)
+    return names
 
-def get_bands(paths=None):
+def get_music_bands(paths=None):
     '''Get a list of music bands.
     '''
     spec = {
@@ -67,8 +71,8 @@ def get_bands(paths=None):
         bands[band] += 1
     return [k for k, v in bands.items() if v > NB_TRACKS_MIN]
 
-def get_director_info(director):
-    return Imdb().get_info(director, type='name') or {}
+def get_name_info(name):
+    return Imdb().get_info(name, type='name') or {}
 
 def get_band_info(band):
     return Sputnikmusic().get_info(band) or {}
@@ -101,12 +105,17 @@ def add_search(query, category, url_info):
         return True
 
 def process_movies(search):
-    for director in randomize(get_directors(search['paths'])):
-        logger.info('searching movies from director "%s"', director)
+    for name in randomize(get_movies_names(search['paths'])):
+        logger.info('searching movies from "%s"', name)
 
-        for movie in get_director_info(director).get('titles', []):
+        for movie in get_name_info(name).get('titles', []):
             history = search.get('history', [])
             if movie['title'] in history:
+                continue
+
+            info = Imdb().get_info(url=movie['url']) or {}
+            rating = info.get('rating')
+            if not rating or rating < settings.IMDB_RATING_MIN:
                 continue
             if movie_exists(movie['title']):
                 continue
@@ -121,7 +130,7 @@ def process_movies(search):
                 return
 
 def process_music(search):
-    for band in randomize(get_bands(search['paths'])):
+    for band in randomize(get_music_bands(search['paths'])):
         logger.info('searching similar bands for "%s"', band)
 
         for similar_band in randomize(get_band_info(band).get('similar_bands', [])):
@@ -133,6 +142,8 @@ def process_music(search):
 
                 history = search.get('history', [])
                 if name in history:
+                    continue
+                if not album.get('rating') or album['rating'] < settings.SPUTNIKMUSIC_RATING_MIN:
                     continue
                 if album_exists(similar_band, album['name']):
                     continue
