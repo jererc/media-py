@@ -108,7 +108,7 @@ def process_movies(search):
     for name in randomize(get_movies_names(search['paths'])):
         logger.info('searching movies from "%s"', name)
 
-        for movie in get_name_info(name).get('titles', []):
+        for movie in get_name_info(name).get('titles_known_for', []):
             history = search.get('history', [])
             if movie['title'] in history:
                 continue
