@@ -74,6 +74,7 @@ class Search(dotdict):
             'last_search': session.get('last_search'),
             'last_result': session.get('last_result'),
             'last_download': session.get('last_download'),
+            'nb_processed': session.get('nb_processed', 0),
             'sort_results': sort_results,
             'pages_max': pages_max,
             'nb_results': 0,
@@ -207,15 +208,15 @@ class Search(dotdict):
 
         if not self.session['first_search']:
             self.session['first_search'] = now
-        if self.session['nb_errors'] <= 1:
-            self.session['last_search'] = now
         if self.session['nb_results']:
             self.session['last_result'] = now
         if self.session['nb_downloads']:
             self.session['last_download'] = now
+        if self.session['nb_errors'] <= 1:
+            self.session['last_search'] = now
+            self.session['nb_processed'] += 1
 
         MSearch().save(self, safe=True)
-
 
 def process():
     for res in MSearch().find(
