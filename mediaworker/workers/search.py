@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 import logging
 from copy import copy
 
+from pymongo import ASCENDING
+
 from mediaworker import env, settings
 
 from systools.system import loop, timeout, timer, dotdict
@@ -220,7 +222,7 @@ class Search(dotdict):
 
 def process():
     for res in MSearch().find(
-            sort=[('session.last_search', 1)],
+            sort=[('session.last_search', ASCENDING)],
             limit=SEARCH_LIMIT,
             timeout=False):
         search = Search(res)

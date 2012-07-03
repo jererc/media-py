@@ -3,6 +3,8 @@ import os.path
 from datetime import datetime, timedelta
 import logging
 
+from pymongo import ASCENDING
+
 from mediaworker import env, settings
 
 from systools.system import loop, timeout, timer
@@ -155,7 +157,7 @@ def update_extra():
                 ],
             },
             limit=UPDATE_LIMIT,
-            sort=[('updated', 1)],
+            sort=[('updated', ASCENDING)],
             timeout=False):
         Release().update({'_id': release['_id']}, {'$set': {
                 'extra': _get_extra(release),
@@ -164,7 +166,7 @@ def update_extra():
 
         logger.info('updated %s release "%s"', release['info'].get('subtype'), release['name'])
 
-def add_search(release):
+def add_search(release, url_info):
     if release_exists(release):
         return
 
@@ -183,7 +185,8 @@ def add_search(release):
             category=category,
             mode=mode,
             langs=SEARCH_LANGS_DEF[category],
-            release_id=release['_id'])
+            release_id=release['_id'],
+            url_info=url_info)
 
     logger.info('added %s search "%s"', category, query)
 
@@ -192,36 +195,38 @@ def process_releases():
             'processed': False,
             'updated': {'$exists': True},
             }):
+        extra = release['extra']
         subtype = release['info'].get('subtype')
 
         if subtype == 'movies':
-            rating = release['extra'].get('imdb_rating')
+            rating = extra.get('imdb_rating')
             if rating is None:
                 continue
-            date = release['extra'].get('imdb_date')
+            date = extra.get('imdb_date')
             if not date:
                 continue
 
             if rating >= settings.IMDB_RATING_MIN \
                     and date >= settings.IMDB_DATE_MIN:
-                add_search(release)
+                add_search(release, url_info=extra.get('imdb_url'))
 
         elif subtype == 'tv':
-            style = release['extra'].get('tvrage_style')
+            style = extra.get('tvrage_style')
             if style is None:
                 continue
 
             if style in settings.TVRAGE_STYLES:
-                add_search(release)
+                add_search(release,
+                        url_info=extra.get('tvrage_url') or extra.get('imdb_url'))
 
         elif subtype == 'music':
-            rating = release['extra'].get('sputnikmusic_rating')
+            rating = extra.get('sputnikmusic_rating')
             if rating is None:
                 continue
 
             if rating >= settings.SPUTNIKMUSIC_RATING_MIN \
                     or artist_exists(release['artist']):
-                add_search(release)
+                add_search(release, url_info=extra.get('sputnikmusic_url'))
 
         Release().update({'_id': release['_id']}, {'$set': {'processed': datetime.utcnow()}}, safe=True)
 

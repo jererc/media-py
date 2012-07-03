@@ -6,6 +6,8 @@ import shutil
 import filecmp
 import logging
 
+from pymongo import ASCENDING
+
 from mediaworker import env, settings
 
 from systools.system import loop, timeout, timer
@@ -102,7 +104,7 @@ def search_subtitles():
                 ],
             },
             limit=SEARCH_LIMIT,
-            sort=[('last_sub_search', 1)],
+            sort=[('last_sub_search', ASCENDING)],
             timeout=False):
         if not os.path.exists(file['file']):
             continue

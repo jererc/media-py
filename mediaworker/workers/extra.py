@@ -3,6 +3,8 @@ import re
 from datetime import datetime, timedelta
 import logging
 
+from pymongo import ASCENDING
+
 from mediaworker import env, settings
 
 from systools.system import loop, timeout, timer
@@ -89,7 +91,7 @@ def update_extra():
                     {'updated': {'$lt': datetime.utcnow() - DELTA_UPDATE}},
                     ],
                 },
-                sort=[('updated', 1)])
+                sort=[('updated', ASCENDING)])
         if not file:
             break
 
