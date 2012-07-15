@@ -97,7 +97,12 @@ def get_workers():
     return workers
 
 def main():
-    main_pid = os.getpid()
+    os.setpgrp()
+
+    def sigint_handler(signum, frame):
+        os.killpg(os.getpgrp(), 9)
+
+    signal.signal(signal.SIGTERM, sigint_handler)
 
     queue = Queue(-1)
     listener = Process(target=listener_process,
@@ -105,23 +110,6 @@ def main():
     listener.start()
 
     workers = get_workers()
-
-    def terminate(signum, frame):
-        if os.getpid() == main_pid:
-            # Stop workers
-            for worker in workers:
-                proc = workers[worker].get('proc')
-                if proc and proc.is_alive():
-                    proc.terminate()
-                    logger.info('stopped %s', worker)
-
-            queue.put_nowait(None)
-            # listener.join()
-            listener.terminate()
-
-        sys.exit(0)
-
-    signal.signal(signal.SIGTERM, terminate)
 
     while True:
         for worker in workers:
