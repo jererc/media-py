@@ -168,8 +168,7 @@ class Search(dotdict):
 
     def _get_filters(self):
         res = copy(settings.FILTER_DEF.get(self.category, {}))
-        re_incl = Title(self.q).get_search_re('word3' if self.mode != 'inc' else None)
-        res['re_incl'] = [res.get('re_incl'), re_incl]
+        res['re_incl'] = Title(self.q).get_search_re()
         res['langs'] = self.langs
         return res
 

@@ -63,5 +63,6 @@ def main():
     if Google().accessible:
         update_info()
 
+
 if __name__ == '__main__':
     main()
