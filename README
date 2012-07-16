@@ -12,6 +12,7 @@ Features:
 - unpack, clean and sort downloaded media into the media type based directories
 - update local media metadata from web sources (imdb, tvrage, sputnikmusic)
 - retrieve trailers and audio tracks for local media and new releases
+- sync media to network hosts
 
 
 Start the worker:
