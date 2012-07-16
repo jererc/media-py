@@ -8,7 +8,7 @@ from mediaworker import env, settings
 
 from systools.system import loop, timeout, timer
 
-from mediacore.model.media_finder import MediaFinder
+from mediacore.model.similar import Similar
 from mediacore.model.file import File
 from mediacore.model.search import Search
 from mediacore.web.google import Google
@@ -21,7 +21,7 @@ from mediacore.util.util import randomize
 NB_TRACKS_MIN = 3
 HISTORY_LIMIT = 100
 SEARCH_LANGS = {
-    'movies': ['en', 'fr'],
+    'movies': settings.MOVIES_SEARCH_LANGS,
     'music': None,
     }
 
@@ -122,7 +122,7 @@ def process_movies(search):
 
             if add_search(movie['title'], 'movies', movie['url']):
                 history.insert(0, movie['title'])
-                MediaFinder().update({'_id': search['_id']}, {'$set': {
+                Similar().update({'_id': search['_id']}, {'$set': {
                         'processed': datetime.utcnow(),
                         'history': history[:HISTORY_LIMIT],
                         }},
@@ -150,7 +150,7 @@ def process_music(search):
 
                 if add_search(name, 'music', album['url']):
                     history.insert(0, name)
-                    MediaFinder().update({'_id': search['_id']}, {'$set': {
+                    Similar().update({'_id': search['_id']}, {'$set': {
                             'processed': datetime.utcnow(),
                             'history': history[:HISTORY_LIMIT],
                             }},
@@ -164,7 +164,7 @@ def main():
     if not Google().accessible:
         return
 
-    for search in MediaFinder().find():
+    for search in Similar().find():
         date = search.get('processed')
         if date and date + timedelta(hours=search['recurrence']) > datetime.utcnow():
             continue

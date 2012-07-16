@@ -8,13 +8,13 @@ from pymongo import DESCENDING
 
 from mediaworker import env, settings
 
+from systools.system import loop, timeout, timer
+
 from mediacore.model.sync import Sync
 from mediacore.model.file import File
 from mediacore.util.media import get_file
 
 from syncd import get_host
-
-from systools.system import loop, timeout, timer
 
 
 DELTA_UPDATE = timedelta(hours=6)
@@ -23,15 +23,16 @@ DELTA_UPDATE = timedelta(hours=6)
 logger = logging.getLogger(__name__)
 
 
-def get_media(path, category, genre=None, count_max=None, size_max=None):
+def get_media(category, genre=None, count_max=None, size_max=None):
     '''Get most recent media.
     '''
-    if not count_max and not size_max:
-        raise Exception('missing parameter count_max or size_max')
-
     base_dirs = []
-    files = []
     size = 0
+
+    if category in ('movies', 'tv'):
+        path = settings.PATHS_MEDIA_NEW['video']
+    elif category == 'music':
+        path = settings.PATHS_MEDIA_NEW['audio']
     spec = {
         'info.subtype': category,
         'file': {'$regex': '^%s/' % re.escape(path)},
@@ -43,9 +44,6 @@ def get_media(path, category, genre=None, count_max=None, size_max=None):
             spec['extra.sputnikmusic_genre'] = {'$regex': '|'.join(genre)}
 
     for res in File().find(spec, sort=[('added', DESCENDING)]):
-        if res['file'] in files:
-            continue
-
         base_dir = get_file(res['file']).get_base(path_root=path)
         if not os.path.isdir(base_dir) or base_dir in base_dirs:
             continue
@@ -53,18 +51,17 @@ def get_media(path, category, genre=None, count_max=None, size_max=None):
         for res_ in File().find({
                 'file': {'$regex': '^%s/' % re.escape(base_dir)},
                 }):
-            files.append(res_['file'])
             size += res_['size']
-
         if size_max and size >= size_max:
             break
+
         base_dirs.append(base_dir)
         if count_max and len(base_dirs) == count_max:
             break
 
     return base_dirs
 
-@loop(minutes=10)
+@loop(minutes=5)
 @timeout(hours=2)
 @timer()
 def main():
@@ -76,8 +73,7 @@ def main():
         if not host:
             continue
 
-        src = get_media(settings.PATHS_MEDIA_NEW['audio'],
-                category=sync['category'],
+        src = get_media(category=sync['category'],
                 genre=sync.get('genre'),
                 count_max=sync.get('count_max'),
                 size_max=sync.get('size_max'))

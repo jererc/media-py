@@ -27,7 +27,7 @@ SPUTNIKMUSIC_RATING_MIN = 3.5   # / 5, greater or equal
 TVRAGE_STYLES = ['scripted', 'mini-series']
 
 
-# Search results filters
+# Search
 re_incl_movies = re.compile(r'\b(br|bd|dvd|hd)rip\b', re.I)
 re_incl_tv = re.compile(r'\b([hp]dtv|dsr(ip)?)\b', re.I)
 re_excl_video = re.compile(r'\b(720|1080)p\b', re.I)
@@ -41,6 +41,9 @@ FILTER_DEF = {    # size ranges in MB, title inclusions and exclusions
     'music': {'size_min': 30, 'size_max': 300},
     'tv': {'size_min': 100, 'size_max': 1000, 're_incl_raw': re_incl_tv, 're_excl_raw': re_excl_video},
     }
+MOVIES_SEARCH_LANGS = ['en']
+TV_SEARCH_LANGS = ['en']
+SUBTITLES_SEARCH_LANGS = ['en']
 
 
 # Credentials

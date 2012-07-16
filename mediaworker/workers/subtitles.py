@@ -21,13 +21,11 @@ from mediacore.util.media import get_file, get_clean_filename
 
 NAME = os.path.splitext(os.path.basename(__file__))[0]
 PATH_VIDEO = settings.PATHS_MEDIA_NEW['video']
-OPENSUBTITLES_LANG = 'eng'
 DELTA_SEARCH = timedelta(hours=12)
-LANG_DEF = {
-    'eng': 'en',
-    'fre': 'fr',
+OPENSUBTITLES_LANGS = {
+    'en': 'eng',
+    'fr': 'fre',
     }
-LANGS = ['en', 'fr']     # priority according to the index
 SEARCH_LIMIT = 20
 DELTA_QUOTA_REACHED = timedelta(hours=12)
 
@@ -42,24 +40,30 @@ def _get_sub_filename(filename_video, filename_sub, lang):
 def _search_opensubtitles(video_file, name, season, episode, date=None):
     video = get_file(video_file)
     opensubtitles = Opensubtitles(settings.OPENSUBTITLES_USERNAME, settings.OPENSUBTITLES_PASSWORD)
-    try:
-        for sub in opensubtitles.results(name, season=season, episode=episode, date=date, lang=OPENSUBTITLES_LANG):
-            filename_sub = _get_sub_filename(video.filename, sub['filename'], LANG_DEF[OPENSUBTITLES_LANG])
-            file_dst = os.path.join(video.path, filename_sub)
-            if os.path.exists(file_dst):
-                continue
+    for lang in settings.SUBTITLES_SEARCH_LANGS:
+        lang_opensubtitles = OPENSUBTITLES_LANGS.get(lang)
+        if not lang_opensubtitles:
+            continue
 
-            try:
-                if opensubtitles.save(sub['url'], file_dst):
-                    File().add(file_dst)
-                    logger.info('saved %s', file_dst)
-            except DownloadQuotaReached, e:
-                update_quota()
-                logger.info(e)
-                raise Exception
+        try:
+            for sub in opensubtitles.results(name, season=season, episode=episode,
+                    date=date, lang=lang_opensubtitles):
+                filename_sub = _get_sub_filename(video.filename, sub['filename'], lang)
+                file_dst = os.path.join(video.path, filename_sub)
+                if os.path.exists(file_dst):
+                    continue
 
-    except OpensubtitlesError:
-        return
+                try:
+                    if opensubtitles.save(sub['url'], file_dst):
+                        File().add(file_dst)
+                        logger.info('saved %s', file_dst)
+                except DownloadQuotaReached, e:
+                    update_quota()
+                    logger.info(e)
+                    raise Exception
+
+        except OpensubtitlesError:
+            return
 
     return True
 
@@ -67,7 +71,7 @@ def _update_subtitles(video_file):
     subtitles = []
     video = get_file(video_file)
 
-    for index, lang in enumerate(sorted(LANGS)):
+    for index, lang in enumerate(settings.SUBTITLES_SEARCH_LANGS):
         file_sub = video.get_subtitles(lang)
         if not file_sub:
             continue

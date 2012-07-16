@@ -30,9 +30,9 @@ DELTA_RELEASE = timedelta(days=90)
 VCDQUALITY_PAGES_MAX = 10
 TV_EPISODE_MAX = 20  # maximum episode number for new releases
 UPDATE_LIMIT = 20
-SEARCH_LANGS_DEF = {
-    'movies': ['en', 'fr'],
-    'tv': ['en'],
+SEARCH_LANGS = {
+    'movies': settings.MOVIES_SEARCH_LANGS,
+    'tv': settings.TV_SEARCH_LANGS,
     'music': None,
     }
 NB_FILES_MIN = {
@@ -184,7 +184,7 @@ def add_search(release, url_info):
     Search().add(query,
             category=category,
             mode=mode,
-            langs=SEARCH_LANGS_DEF[category],
+            langs=SEARCH_LANGS[category],
             release_id=release['_id'],
             url_info=url_info)
 
