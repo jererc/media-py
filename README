@@ -6,8 +6,8 @@ Features:
 - asynchronously search for torrents from multiple sites
 - search for tv/anime next episodes/seasons
 - fetch new releases from web sources (vcdquality releases, tvrage schedule, sputnikmusic reviews)
-- search for new media which match releases filters (imdb rating, tvrage style, sputnikmusic rating)
-- search for new media from the local media metadata (movies directors and actors, music similar bands)
+- fetch new media matching releases filters (imdb rating, tvrage style, sputnikmusic rating)
+- search for new media similar/related to the local media (movies directors and actors, music bands)
 - fetch subtitles for local video files
 - unpack, clean and sort downloaded media into the media type based directories
 - update local media metadata from web sources (imdb, tvrage, sputnikmusic)
