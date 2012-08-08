@@ -1,4 +1,3 @@
-from datetime import datetime
 import re
 
 
@@ -7,32 +6,26 @@ DB_NAME = 'mediaworker'
 
 # Data
 PATH_MEDIA_ROOT = '/home/user'
+PATHS_MEDIA_NEW = {
+    'video': '/home/user/video/new',
+    'audio': '/home/user/audio/new',
+    'image': '/home/user/image/new',
+    None: '/home/user/misc/new',    # other media types
+    }
 PATHS_FINISHED = {
     'transmission': '/home/user/.transmission/finished', # must be different than the download dir
     }
 PATH_INVALID_DOWNLOAD = '/home/user/misc/invalid'
-PATHS_MEDIA_NEW = {
-    'audio': '/home/user/audio/new',
-    'video': '/home/user/video/new',
-    'image': '/home/user/image/new',
-    None: '/home/user/misc/new',    # other media types
-    }
+PATHS_EXCLUDE = []
 PATH_TMP = '/tmp'
 
 
-# Releases filters
-IMDB_DATE_MIN = datetime.utcnow().year - 1  # greater or equal
-IMDB_RATING_MIN = 6.0   # / 10, greater or equal
-SPUTNIKMUSIC_RATING_MIN = 3.5   # / 5, greater or equal
-TVRAGE_STYLES = ['scripted', 'mini-series']
-
-
-# Search
+# Search results filters
 re_incl_movies = re.compile(r'\b(br|bd|dvd|hd)rip\b', re.I)
 re_incl_tv = re.compile(r'\b([hp]dtv|dsr(ip)?)\b', re.I)
 re_excl_video = re.compile(r'\b(720|1080)p\b', re.I)
 re_excl_anime = re.compile(r'\b(720|1080)p\b', re.I)
-FILTER_DEF = {    # size ranges in MB, title inclusions and exclusions
+SEARCH_FILTERS = {    # size ranges in MB, title inclusions and exclusions
     'anime': {'size_min': 100, 'size_max': 1000, 're_excl_raw': re_excl_anime},
     'apps': {},
     'books': {},
@@ -41,9 +34,32 @@ FILTER_DEF = {    # size ranges in MB, title inclusions and exclusions
     'music': {'size_min': 30, 'size_max': 300},
     'tv': {'size_min': 100, 'size_max': 1000, 're_incl_raw': re_incl_tv, 're_excl_raw': re_excl_video},
     }
+
+
+# Search langs
 MOVIES_SEARCH_LANGS = ['en']
 TV_SEARCH_LANGS = ['en']
 SUBTITLES_SEARCH_LANGS = ['en']
+
+
+# Media filters
+MEDIA_FILTERS = {
+    'imdb': {
+        'genre': {'exclude': r'\bhorror\b'},
+        'rating': {'min': 6.5},
+        },
+    'tvrage': {
+        'genre': {'exclude': r'\bteens|soaps\b'},
+        'classification': {'include': r'\bscripted\b'},
+        },
+    'sputnikmusic': {
+        'genre': {'exclude': r'\b(black metal|death metal|hip hop)\b'},
+        'rating': {'min': 3.5},
+        },
+    'lastfm': {
+        'genre': {'exclude': r'\b(black metal|death metal|hip hop)\b'},
+        },
+    }
 
 
 # Credentials

@@ -10,7 +10,7 @@ from mediaworker import env, settings
 from systools.system import loop, timeout, timer, dotdict
 
 from mediacore.model.search import Search as MSearch
-from mediacore.model.file import File
+from mediacore.model.media import Media
 from mediacore.model.result import Result
 from mediacore.web.torrent import results
 from mediacore.web.google import Google
@@ -39,15 +39,7 @@ NB_SEEDS_MIN = {
     'inc': 10,
     'ever': 1,
     }
-FILE_DEF = {     # (file type, min number of matching files)
-    'anime': ('video', 1),
-    'apps': (None, 1),
-    'books': (None, 1),
-    'games': (None, 1),
-    'movies': ('video', 1),
-    'music': ('audio', 3),
-    'tv': ('video', 1),
-    }
+FILES_COUNT_MIN = {'music': 3}
 
 
 logger = logging.getLogger(__name__)
@@ -56,12 +48,10 @@ logger = logging.getLogger(__name__)
 class Search(dotdict):
     def __init__(self, doc):
         super(Search, self).__init__(doc)
-
-        self.mode = self.get('mode', 'once')
-        self.langs = self.get('langs', [])
+        self.langs = self.get('langs') or []
+        self.results = self.get('results', [])
 
         session = self.get('session', {})
-
         if session.get('nb_downloads') == 0 \
                 and session.get('nb_errors') == 0 \
                 and session.get('nb_pending') == 0:
@@ -85,27 +75,34 @@ class Search(dotdict):
             'nb_errors': 0,
             }
 
+    def _get_query(self):
+        return MSearch().get_query(self)
+
     def _validate_dates(self):
         now = datetime.utcnow()
 
-        if self.session['last_search'] and self.session['last_search'] > now - DELTA_SEARCH_MIN[self.mode]:
+        if self.session['last_search'] \
+                and self.session['last_search'] > now - DELTA_SEARCH_MIN[self.mode]:
             return False
-        if self.session['last_download'] and self.session['last_download'] > now - DELTA_SEARCH_MIN[self.mode]:
+        if self.session['last_download'] \
+                and self.session['last_download'] > now - DELTA_SEARCH_MIN[self.mode]:
             return False
 
         date_ = self.session['last_result'] or self.session['first_search']
         if date_ and date_ < now - DELTA_IDLE:
-            if self.session['last_search'] and self.session['last_search'] > now - DELTA_IDLE_SEARCH_MIN:
+            if self.session['last_search'] \
+                    and self.session['last_search'] > now - DELTA_IDLE_SEARCH_MIN:
                 return False
 
         return True
 
     def _search_files(self):
-        file_type, nb_files_min = FILE_DEF[self.category]
-        files = File().search(self.q, file_type)
-        if len(files) >= nb_files_min:
-            MSearch().remove(id=self._id)
-            logger.info('removed %s search "%s": found %s', self.category, self.q, files[0])
+        files = Media().search_files(**self)
+        if len(files) >= FILES_COUNT_MIN.get(self.category, 1):
+            if self.mode == 'inc':
+                self._add_next('episode')
+            MSearch().remove({'_id': self._id}, safe=True)
+            logger.info('removed %s search "%s": found %s', self.category, self._get_query(), files)
             return True
 
     def _validate_result(self, result):
@@ -125,18 +122,9 @@ class Search(dotdict):
     def _add_next(self, mode):
         '''Create a search for next episode or season.
         '''
-        query = None
-        if mode == 'episode':
-            query = MSearch().get_next_episode(self.q)
-        elif mode == 'season':
-            query = MSearch().get_next_season(self.q)
-
-        if query and not MSearch().get(q=query, category=self.category):
-            MSearch().add(query,
-                    category=self.category,
-                    mode=self.mode,
-                    langs=self.langs,
-                    url_info=self.get('url_info'))
+        search = MSearch().get_next(self, mode=mode)
+        if search and MSearch().add(**search):
+            logger.info('added search %s', search)
 
     def validate(self):
         if not self._validate_dates():
@@ -148,8 +136,7 @@ class Search(dotdict):
 
         if self.mode == 'inc' and self.category in ('tv', 'anime'):
             # Episodes next season
-            title = Title(self.q)
-            if title.season and title.episode and int(title.episode) > 2 \
+            if self.get('season') and self.get('episode') and self.episode > 2 \
                     and self.session['first_search'] \
                     and self.session['first_search'] < datetime.utcnow() - DELTA_NEXT_SEASON:
                 self._add_next('season')
@@ -160,24 +147,26 @@ class Search(dotdict):
             # Remove obsolete searches
             date_ = self.session['last_result'] or self.session['first_search']
             if date_ and date_ < datetime.utcnow() - DELTA_OBSOLETE:
-                MSearch().remove(self._id)
-                logger.info('removed search "%s" (no result for %d days)', self.q, DELTA_OBSOLETE.days)
+                MSearch().remove({'_id': self._id}, safe=True)
+                logger.info('removed search "%s" (no result for %d days)', self._get_query(), DELTA_OBSOLETE.days)
                 return False
 
         return True
 
     def _get_filters(self):
-        res = copy(settings.FILTER_DEF.get(self.category, {}))
-        res['re_incl'] = Title(self.q).get_search_re()
+        res = copy(settings.SEARCH_FILTERS.get(self.category, {}))
+        res['re_incl'] = Title(self._get_query()).get_search_re()
         res['langs'] = self.langs
         return res
 
     @timeout(minutes=30)
     @timer(300)
     def process(self):
-        logger.info('processing %s search "%s"', self.category, self.q)
+        query = self._get_query()
 
-        for result in results(self.q,
+        logger.info('processing %s search "%s"', self.category, query)
+
+        for result in results(query,
                 category=self.category,
                 sort=self.session['sort_results'],
                 pages_max=self.session['pages_max'],
@@ -197,7 +186,8 @@ class Search(dotdict):
                 self._add_next('episode')
 
             result['search_id'] = self._id
-            Result().insert(result, safe=True)
+            result_id = Result().insert(result, safe=True)
+            self.results.insert(0, result_id)
             self.session['nb_downloads'] += 1
             logger.info('found "%s" on %s', result.title, result.net_name)
 
@@ -220,8 +210,7 @@ class Search(dotdict):
         MSearch().save(self, safe=True)
 
 def process():
-    for res in MSearch().find(
-            sort=[('session.last_search', ASCENDING)],
+    for res in MSearch().find(sort=[('session.last_search', ASCENDING)],
             limit=SEARCH_LIMIT,
             timeout=False):
         search = Search(res)
@@ -236,7 +225,8 @@ def main():
     if Google().accessible:
         process()
 
-    Result().remove({'created': {'$lt': datetime.utcnow() - DELTA_RESULTS_MAX}}, safe=True)
+    Result().remove({'created': {'$lt': datetime.utcnow() - DELTA_RESULTS_MAX}},
+            safe=True)
 
 
 if __name__ == '__main__':

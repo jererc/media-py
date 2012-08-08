@@ -6,10 +6,11 @@ from glob import glob
 import logging
 from logging.handlers import RotatingFileHandler
 import sys
-import signal
 import traceback
 
 from mediaworker import settings
+
+from systools.system import pgrp
 
 
 WORKERS_DIR = 'workers'
@@ -96,14 +97,8 @@ def get_workers():
             workers[worker] = {'target': target}
     return workers
 
+@pgrp()
 def main():
-    os.setpgrp()
-
-    def sigint_handler(signum, frame):
-        os.killpg(os.getpgrp(), 9)
-
-    signal.signal(signal.SIGTERM, sigint_handler)
-
     queue = Queue(-1)
     listener = Process(target=listener_process,
             args=(queue, listener_configurer))

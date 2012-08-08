@@ -24,15 +24,6 @@ DELTA_CLEAN = timedelta(hours=24)
 logger = logging.getLogger(__name__)
 
 
-# def process_download(torrent):
-#     # Remove search
-#     search = Search().find_one({'hashes': torrent['hash'], 'mode': 'once'})
-#     if search:
-#         Search().remove(id=search['_id'])
-#         logger.info('removed %s search "%s": download finished', search['category'], search['q'])
-
-#     return True
-
 def validate_clean():
     res = Worker().get_attr(NAME, 'cleaned')
     if not res or res < datetime.utcnow() - DELTA_CLEAN:
@@ -63,7 +54,7 @@ def main():
         try:
             transmission.add(res['url_magnet'])
 
-            Search().col.update({'_id': res['search_id']},
+            Search().update({'_id': res['search_id']},
                     {'$addToSet': {'hashes': res['hash']}}, safe=True)
 
             logger.info('added torrent %s to transmission', res['title'].encode('utf-8'))

@@ -1,18 +1,17 @@
 #!/usr/bin/env python
 import os.path
 from datetime import datetime, timedelta
-import re
 import logging
 
 from pymongo import DESCENDING
 
-from mediaworker import env, settings
+from mediaworker import env
 
-from systools.system import loop, timeout, timer
+from systools.system import loop, timeout, timer, dotdict
 
-from mediacore.model.sync import Sync
-from mediacore.model.file import File
-from mediacore.util.media import get_file
+from mediacore.model.sync import Sync as MSync
+from mediacore.model.media import Media
+from mediacore.util.media import iter_files, get_size
 
 from syncd import get_host
 
@@ -23,79 +22,112 @@ DELTA_UPDATE = timedelta(hours=6)
 logger = logging.getLogger(__name__)
 
 
+class Sync(dotdict):
+    def __init__(self, doc):
+        super(Sync, self).__init__(doc)
+        host = get_host(username=self.username, password=self.password)
+        if host:
+            if not self.src:
+                if not self.get('started'):
+                    self.started = datetime.utcnow()
+                    self.save()
+                self.process_recurrent(host)
+
+            elif self.process(host, self.src, self.dst):
+                MSync().remove({'_id': self._id}, safe=True)
+
+    @timer()
+    def process(self, host, src, dst):
+        if not isinstance(src, (tuple, list)):
+            src = [src]
+
+        started = datetime.utcnow()
+        for src_ in src:
+            try:
+                host.sftpsync(src_, dst, download=False, delete=True)
+                logger.info('synced %s with %s@%s:%s in %s', src_, host.username, host.host, dst, datetime.utcnow() - started)
+            except Exception, e:
+                logger.info('failed to sync %s with %s@%s:%s: %s', src_, host.username, host.host, dst, e)
+                return
+        return True
+
+    @timeout(hours=2)
+    def process_recurrent(self, host):
+        self.started = datetime.utcnow()
+        self.save()
+
+        src_paths = get_media(**self.parameters)
+
+        # Delete obsolete destination files
+        basenames = [os.path.basename(s) for s in src_paths]
+        for dst in host.listdir(self.dst):
+            if os.path.basename(dst) not in basenames:
+                host.remove(dst)
+                logger.info('removed obsolete %s@%s:%s', host.username, host.host, dst)
+
+        if self.process(host, src_paths, self.dst):
+            self.media = src_paths
+            self.processed = datetime.utcnow()
+            self.save()
+
+    def save(self):
+        MSync().save(self, safe=True)
+
+
+@timer()
 def get_media(category, genre=None, count_max=None, size_max=None):
     '''Get most recent media.
     '''
-    base_dirs = []
+    dirs = []
     size = 0
 
-    if category in ('movies', 'tv'):
-        path = settings.PATHS_MEDIA_NEW['video']
-    elif category == 'music':
-        path = settings.PATHS_MEDIA_NEW['audio']
-    spec = {
-        'info.subtype': category,
-        'file': {'$regex': '^%s/' % re.escape(path)},
-        }
+    spec = {'info.subtype': category}
     if genre:
+        val = {'$regex': r'\b%s\b' % '|'.join(genre), '$options': 'i'}
         if category == 'movies':
-            spec['extra.imdb_genre'] = {'$regex': '|'.join(genre)}
+            spec['extra.imdb.genre'] = val
         elif category == 'music':
-            spec['extra.sputnikmusic_genre'] = {'$regex': '|'.join(genre)}
+            spec['$or'] = [
+                {'extra.sputnikmusic.genre': val},
+                {'extra.lastfm.genre': val},
+                ]
 
-    for res in File().find(spec, sort=[('added', DESCENDING)]):
-        base_dir = get_file(res['file']).get_base(path_root=path)
-        if not os.path.isdir(base_dir) or base_dir in base_dirs:
+    for media in Media().find(spec, sort=[('created', DESCENDING)]):
+        dirs_ = Media().get_bases(media['_id'], dirs_only=True)
+        if not dirs_:
             continue
-
-        for res_ in File().find({
-                'file': {'$regex': '^%s/' % re.escape(base_dir)},
-                }):
-            size += res_['size']
+        for dir in dirs_:
+            for file in iter_files(dir):
+                size_ = get_size(file)
+                if size_:
+                    size += size_ / 1024
         if size_max and size >= size_max:
             break
-
-        base_dirs.append(base_dir)
-        if count_max and len(base_dirs) == count_max:
+        dirs.extend(dirs_)
+        if count_max and len(dirs) > count_max:
+            dirs = dirs[:count_max]
             break
 
-    return base_dirs
+    return dirs
 
-@loop(minutes=5)
-@timeout(hours=2)
-@timer()
+def process_once():
+    for sync in MSync().find({'src': {'$ne': None}}):
+        sync = Sync(sync)
+
+def process_recurrent():
+    for sync in MSync().find({
+            'src': None,
+            '$or': [
+                {'processed': {'$exists': False}},
+                {'processed': {'$lt': datetime.utcnow() - DELTA_UPDATE}},
+                ],
+            }):
+        sync = Sync(sync)
+
+@loop(30)
 def main():
-    for sync in Sync().find({'$or': [
-            {'processed': {'$exists': False}},
-            {'processed': {'$lt': datetime.utcnow() - DELTA_UPDATE}},
-            ]}):
-        host = get_host(username=sync['username'], password=sync['password'])
-        if not host:
-            continue
-
-        src = get_media(category=sync['category'],
-                genre=sync.get('genre'),
-                count_max=sync.get('count_max'),
-                size_max=sync.get('size_max'))
-
-        # Delete obsolete
-        src_basenames = [os.path.basename(s) for s in src]
-        for path_dst in host.listdir(sync['path']):
-            if os.path.basename(path_dst) not in src_basenames:
-                host.remove(path_dst)
-                logger.info('removed obsolete %s@%s:%s', host.username, host.host, path_dst)
-
-        for path_src in src:
-            started = datetime.utcnow()
-            try:
-                host.sftpsync(path_src, sync['path'], download=False, delete=True)
-            except Exception, e:
-                logger.info('failed to sync %s with %s@%s:%s: %s', path_src, host.username, host.host, sync['path'], e)
-                continue
-            logger.info('synced %s with %s@%s:%s in %s', path_src, host.username, host.host, sync['path'], datetime.utcnow() - started)
-
-        Sync().update({'_id': sync['_id']},
-                {'$set': {'processed': datetime.utcnow()}}, safe=True)
+    process_once()
+    process_recurrent()
 
 
 if __name__ == '__main__':

@@ -1,110 +1,86 @@
 #!/usr/bin/env python
-import re
 from datetime import datetime, timedelta
 import logging
 
-from pymongo import ASCENDING
+from pymongo import DESCENDING
 
-from mediaworker import env, settings
+from mediaworker import env
 
 from systools.system import loop, timeout, timer
 
-from mediacore.model.file import File
+from mediacore.model.media import Media
+from mediacore.model.release import Release
+from mediacore.model.search import Search
 from mediacore.web.google import Google
-from mediacore.web.youtube import Youtube
-from mediacore.web.imdb import Imdb
-from mediacore.web.tvrage import Tvrage
-from mediacore.web.sputnikmusic import Sputnikmusic
-from mediacore.util.util import prefix_dict
+from mediacore.web.info import search_extra
 
 
-FILE_SPEC = {'$regex': '^(%s)/' % '|'.join([re.escape(p) for p in settings.PATHS_MEDIA_NEW.values()])}
-DELTA_UPDATE = timedelta(hours=24)
-DELTA_NO_UPDATE = timedelta(days=7)
 UPDATE_LIMIT = 20
+DELTA_UPDATE_DEF = [    # delta created, delta updated
+    (timedelta(days=365), timedelta(days=30)),
+    (timedelta(days=90), timedelta(days=15)),
+    (timedelta(days=30), timedelta(days=7)),
+    (timedelta(days=10), timedelta(days=4)),
+    (timedelta(days=2), timedelta(days=2)),
+    ]
 
 
 logger = logging.getLogger(__name__)
 
 
-def _update_extra(type, info):
-    '''Update the matching files extra info.
+def validate_times(created, updated):
+    if not updated:
+        return True
 
-    :return: True if successful
-    '''
-    spec = {
-        'file': FILE_SPEC,
-        'type': type,
-        }
-    extra = {}
+    delta_created = datetime.utcnow() - created
+    delta_updated = datetime.utcnow() - updated
+    for d_created, d_updated in DELTA_UPDATE_DEF:
+        if delta_created > d_created and delta_updated > d_updated:
+            return True
 
-    if type == 'video' and info.get('full_name') and info.get('name'):
-        key = 'name' if info.get('subtype') == 'tv' else 'full_name'
-        name = info[key]
-        spec['info.%s' % key] = name
-
-        res = Youtube().get_trailer(name, info['date'])
-        if res:
-            extra.update(prefix_dict(res, 'youtube_'))
-
-        if info.get('subtype') == 'movies':
-            res = Imdb().get_info(info['full_name'], year=info.get('date'))
-            prefix = 'imdb_'
-        else:
-            res = Tvrage().get_info(info['name'])
-            prefix = 'tvrage_'
-            if not res:
-                res = Imdb().get_info(info['full_name'], year=info.get('date'))
-                prefix = 'imdb_'
-        if res:
-            extra.update(prefix_dict(res, prefix))
-
-    elif type == 'audio' and info.get('artist') and info.get('album'):
-        spec['info.artist'] = info['artist']
-        spec['info.album'] = info['album']
-        name = '%s - %s' % (info['artist'], info['album'])
-
-        res = Youtube().get_track(info['artist'], info['album'])
-        if res:
-            extra.update(prefix_dict(res, 'youtube_'))
-
-        res = Sputnikmusic().get_album_info(info['artist'], info['album'])
-        if res:
-            extra.update(prefix_dict(res, 'sputnikmusic_'))
-
-    else:
-        return
-
-    File().update(spec=spec, info={'extra': extra, 'updated': datetime.utcnow()})
-    logger.info('updated "%s" %s files extra info', name, type)
-    return True
-
-def update_extra():
-    '''Update the files extra info.
-    '''
-    for i in range(UPDATE_LIMIT):   # we use find_one since a single update can update multiple files (e.g.: audio)
-        file = File().find_one({
-                'file': FILE_SPEC,
-                'type': {'$in': ['video', 'audio']},
-                '$or': [
-                    {'updated': {'$exists': False}},
-                    {'updated': {'$lt': datetime.utcnow() - DELTA_UPDATE}},
-                    ],
-                },
-                sort=[('updated', ASCENDING)])
-        if not file:
-            break
-
-        if not _update_extra(file.get('type'), file.get('info')):
-            # Update date for files which could not be updated
-            File().update(id=file['_id'], info={'updated': datetime.utcnow() + DELTA_NO_UPDATE})
-
-@loop(minutes=2)
 @timeout(hours=1)
 @timer()
+def update_extra(model):
+    count = 0
+    for obj in model().find({
+            '$or': [
+                {'updated': {'$exists': False}},
+                {'updated': {'$lt': datetime.utcnow() - DELTA_UPDATE_DEF[-1][1]}},
+                ],
+            }, sort=[('created', DESCENDING)], timeout=False):
+        # Reload the document in case it has been updated after the request
+        obj = model().find_one({'_id': obj['_id']})
+        if not obj:
+            continue
+        if not validate_times(obj['created'], obj.get('updated')):
+            continue
+        category = obj.get('info', {}).get('subtype') or obj.get('category')
+
+        spec = {'_id': obj['_id']}
+        doc = {'updated': datetime.utcnow()}
+        extra = search_extra(obj)
+        if extra:
+            doc['extra'] = extra
+            if category == 'tv':
+                if model == Media:
+                    spec = {'info.name': obj['info']['name']}
+                else:
+                    spec = {'name': obj['name']}
+
+        model().update(spec, {'$set': doc}, multi=True, safe=True)
+
+        name = model().get_query(obj) if model == Search else obj['name']
+        logger.info('updated %s %s "%s"', category, model.__name__.lower(), name)
+
+        count += 1
+        if count == UPDATE_LIMIT:
+            break
+
+@loop(minutes=5)
 def main():
     if Google().accessible:
-        update_extra()
+        for model in (Media, Release, Search):
+            update_extra(model)
 
 
 if __name__ == '__main__':
