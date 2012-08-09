@@ -17,21 +17,22 @@ from mediacore.web.google import Google
 from mediacore.util.title import Title
 
 
-DELTA_SEARCH_MIN = {
+DELTA_SEARCH = {
     'once': timedelta(hours=12),
     'inc': timedelta(hours=12),
     'ever': timedelta(hours=24),
     }
-DELTA_IDLE_SEARCH_MIN = timedelta(days=2)
-DELTA_RESULT_MIN = {
+DELTA_FILES_SEARCH = timedelta(hours=1)
+DELTA_RESULT = {
     'once': timedelta(hours=24),
     'inc': timedelta(hours=12),
     'ever': timedelta(hours=24),
     }
 DELTA_IDLE = timedelta(days=10)
+DELTA_IDLE_SEARCH = timedelta(days=2)
 DELTA_OBSOLETE = timedelta(days=30)
 DELTA_NEXT_SEASON = timedelta(days=60)
-DELTA_RESULTS_MAX = timedelta(days=120)
+DELTA_RESULTS_MAX = timedelta(days=180)
 SEARCH_LIMIT = 10
 PAGES_MAX = 20
 NB_SEEDS_MIN = {
@@ -66,6 +67,7 @@ class Search(dotdict):
             'last_search': session.get('last_search'),
             'last_result': session.get('last_result'),
             'last_download': session.get('last_download'),
+            'last_files_search': session.get('last_files_search'),
             'nb_processed': session.get('nb_processed', 0),
             'sort_results': sort_results,
             'pages_max': pages_max,
@@ -78,25 +80,20 @@ class Search(dotdict):
     def _get_query(self):
         return MSearch().get_query(self)
 
-    def _validate_dates(self):
-        now = datetime.utcnow()
+    def _add_next(self, mode):
+        '''Create a search for next episode or season.
+        '''
+        search = MSearch().get_next(self, mode=mode)
+        if search and MSearch().add(**search):
+            logger.info('added search %s', search)
 
-        if self.session['last_search'] \
-                and self.session['last_search'] > now - DELTA_SEARCH_MIN[self.mode]:
-            return False
-        if self.session['last_download'] \
-                and self.session['last_download'] > now - DELTA_SEARCH_MIN[self.mode]:
-            return False
+    def _is_finished(self):
+        if self.mode == 'ever':
+            return
+        date = self.session['last_files_search']
+        if date and date > datetime.utcnow() - DELTA_FILES_SEARCH:
+            return
 
-        date_ = self.session['last_result'] or self.session['first_search']
-        if date_ and date_ < now - DELTA_IDLE:
-            if self.session['last_search'] \
-                    and self.session['last_search'] > now - DELTA_IDLE_SEARCH_MIN:
-                return False
-
-        return True
-
-    def _search_files(self):
         files = Media().search_files(**self)
         if len(files) >= FILES_COUNT_MIN.get(self.category, 1):
             if self.mode == 'inc':
@@ -105,10 +102,61 @@ class Search(dotdict):
             logger.info('removed %s search "%s": found %s', self.category, self._get_query(), files)
             return True
 
+        self.session['last_files_search'] = datetime.utcnow()
+        MSearch().save(self, safe=True)
+
+    def _is_obsolete(self):
+        # TODO: handle handle obsolete episodes searches
+        if self.mode in ('inc', 'ever'):
+            return
+        date = self.session['last_result'] or self.session['first_search']
+        if date and date < datetime.utcnow() - DELTA_OBSOLETE:
+            MSearch().remove({'_id': self._id}, safe=True)
+            logger.info('removed search "%s" (no result for %d days)', self._get_query(), DELTA_OBSOLETE.days)
+            return True
+
+    def _validate_dates(self):
+        now = datetime.utcnow()
+
+        if self.session['last_search'] \
+                and self.session['last_search'] > now - DELTA_SEARCH[self.mode]:
+            return False
+        if self.session['last_download'] \
+                and self.session['last_download'] > now - DELTA_SEARCH[self.mode]:
+            return False
+
+        date = self.session['last_result'] or self.session['first_search']
+        if date and date < now - DELTA_IDLE:
+            if self.session['last_search'] \
+                    and self.session['last_search'] > now - DELTA_IDLE_SEARCH:
+                return False
+
+        return True
+
+    def _check_episode(self):
+        if self.get('season') and self.get('episode') and self.episode > 2 \
+                and self.session['first_search'] \
+                and self.session['first_search'] < datetime.utcnow() - DELTA_NEXT_SEASON:
+            self._add_next('season')
+
+    def validate(self):
+        if self._is_finished() or self._is_obsolete():
+            return False
+        if not self._validate_dates():
+            return False
+        self._check_episode()
+        return True
+
+    def _get_filters(self):
+        res = copy(settings.SEARCH_FILTERS.get(self.category, {}))
+        res['re_incl'] = Title(self._get_query()).get_search_re()
+        res['langs'] = self.langs
+        return res
+
     def _validate_result(self, result):
         '''Check result dynamic attributes.
         '''
-        if result.date and result.date > datetime.utcnow() - DELTA_RESULT_MIN[self.mode]:
+        if result.date and result.date > datetime.utcnow() - DELTA_RESULT[self.mode]:
             logger.info('filtered "%s" (%s): too recent (%s)', result.title, result.net_name, result.date)
             return False
 
@@ -118,46 +166,6 @@ class Search(dotdict):
             return False
 
         return True
-
-    def _add_next(self, mode):
-        '''Create a search for next episode or season.
-        '''
-        search = MSearch().get_next(self, mode=mode)
-        if search and MSearch().add(**search):
-            logger.info('added search %s', search)
-
-    def validate(self):
-        if not self._validate_dates():
-            return False
-        if self.mode == 'ever':
-            return True
-        if self._search_files():
-            return False
-
-        if self.mode == 'inc' and self.category in ('tv', 'anime'):
-            # Episodes next season
-            if self.get('season') and self.get('episode') and self.episode > 2 \
-                    and self.session['first_search'] \
-                    and self.session['first_search'] < datetime.utcnow() - DELTA_NEXT_SEASON:
-                self._add_next('season')
-
-            # TODO: remove obsolete episodes searches
-
-        else:
-            # Remove obsolete searches
-            date_ = self.session['last_result'] or self.session['first_search']
-            if date_ and date_ < datetime.utcnow() - DELTA_OBSOLETE:
-                MSearch().remove({'_id': self._id}, safe=True)
-                logger.info('removed search "%s" (no result for %d days)', self._get_query(), DELTA_OBSOLETE.days)
-                return False
-
-        return True
-
-    def _get_filters(self):
-        res = copy(settings.SEARCH_FILTERS.get(self.category, {}))
-        res['re_incl'] = Title(self._get_query()).get_search_re()
-        res['langs'] = self.langs
-        return res
 
     @timeout(minutes=30)
     @timer(300)

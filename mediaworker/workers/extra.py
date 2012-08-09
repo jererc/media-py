@@ -42,12 +42,14 @@ def validate_times(created, updated):
 @timer()
 def update_extra(model):
     count = 0
+
+    sort = [('date', DESCENDING)] if model == Release else [('created', DESCENDING)]
     for obj in model().find({
             '$or': [
                 {'updated': {'$exists': False}},
                 {'updated': {'$lt': datetime.utcnow() - DELTA_UPDATE_DEF[-1][1]}},
                 ],
-            }, sort=[('created', DESCENDING)], timeout=False):
+            }, sort=sort, timeout=False):
         # Reload the document in case it has been updated after the request
         obj = model().find_one({'_id': obj['_id']})
         if not obj:
