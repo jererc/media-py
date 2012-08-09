@@ -5,7 +5,7 @@ import logging
 
 from mediaworker import env, settings
 
-from systools.system import loop, timeout, timer
+from systools.system import loop, timeout, timer, dotdict
 
 from mediacore.model.release import Release
 from mediacore.model.similar import Similar
@@ -29,11 +29,153 @@ FILES_COUNT_MIN = {'music': 3}
 logger = logging.getLogger(__name__)
 
 
+class SimilarSearch(dotdict):
+    def __init__(self, doc):
+        super(SimilarSearch, self).__init__(doc)
+        self.category = self.get('category')
+        self.history = self.get('history', [])
+        self.processed = self.get('processed')
+
+    def validate(self):
+        if not self.processed:
+            return True
+        if self.processed < datetime.utcnow() - timedelta(hours=self.recurrence):
+            return True
+
+    def _validate_history(self, args):
+        for info in self.history:
+            if args.get('name') != info.get('name'):
+                continue
+            if args.get('album') != info.get('album'):
+                continue
+            if args.get('category') != info.get('category'):
+                continue
+            return False
+        return True
+
+    def _process_result(self, args):
+        if self._validate_history(args) and add_search(**args):
+            self.history.insert(0, args)
+            return True
+
+    def _get_similar_movies(self, media):
+        for similar_movie in similar_movies(media['name'], type='title',
+                filters=settings.MEDIA_FILTERS):
+            if self._process_result({
+                    'name': similar_movie,
+                    'category': 'movies',
+                    'media_id': media['_id'],
+                    }):
+                return True
+
+        logger.info('failed to find similar movies from "%s"', media['name'])
+
+    def _get_similar_music(self, media):
+        for similar_band, album in similar_music(media['info'].get('artist'),
+                filters=settings.MEDIA_FILTERS):
+            if self._process_result({
+                    'name': similar_band,
+                    'album': album,
+                    'category': 'music',
+                    'media_id': media['_id'],
+                    }):
+                return True
+
+        logger.info('failed to find similar music from "%s"', media['info'].get('artist'))
+
+    def get_similar(self, media_id):
+        media = Media().get(media_id)
+        if not media:
+            return
+
+        category = media['info'].get('subtype')
+        if category == 'movies':
+            return self._get_similar_movies(media)
+        elif category == 'music':
+            return self._get_similar_music(media)
+
+    def _get_files_pattern(self, bases):
+        if not bases:
+            return
+        if not isinstance(bases, (tuple, list)):
+            bases = [bases]
+        return r'^(%s)' % '|'.join([re.escape(b) for b in bases])
+
+    def _get_movies_ids(self, bases=None):
+        '''Get a list of movies media ids.
+
+        :return: list of tuples (movie, Media id)
+        '''
+        movies = {}
+        spec = {
+            'info.subtype': 'movies',
+            'extra.imdb': {'$exists': True},
+            }
+        if bases:
+            spec['files'] = {'$regex': self._get_files_pattern(bases)}
+
+        for media in Media().find(spec):
+            if media['name'] and media['name'] not in movies:
+                movies[media['name']] = media['_id']
+        return movies.values()
+
+    def _get_music_ids(self, bases=None):
+        '''Get a list of music media ids.
+
+        :return: list of tuples (band, Media id)
+        '''
+        bands = {}
+        spec = {
+            'info.subtype': 'music',
+            'info.artist': {'$nin': ['', 'va', 'various']},
+            }
+        if bases:
+            spec['files'] = {'$regex': self._get_files_pattern(bases)}
+
+        for media in Media().find(spec):
+            band = media['info'].get('artist')
+            if band:
+                bands.setdefault(band, {'_id': media['_id'], 'count': 0})
+                bands[band]['count'] += len(media['files'])
+
+        res = []
+        for band, info in bands.items():
+            if info['count'] >= FILES_COUNT_MIN['music']:
+                res.append(info['_id'])
+        return res
+
+    def _get_media_ids(self):
+        res = []
+        if self.category == 'movies':
+            res = self._get_movies_ids(self.paths)
+        elif self.category == 'music':
+            res = self._get_music_ids(self.paths)
+        return res
+
+    @timeout(minutes=30)
+    def process(self):
+        '''Process a similar search.
+        '''
+        if self.get('media_id'):
+            media_ids = [self.media_id]
+        else:
+            media_ids = randomize(self._get_media_ids())
+
+        for media_id in media_ids:
+            if self.get_similar(media_id):
+                return True
+
+    def save(self):
+        self.history = self.history[:HISTORY_LIMIT]
+        self.processed = datetime.utcnow()
+        Similar().save(self, safe=True)
+
+
 def _media_exists(**kwargs):
     files = Media().search_files(**kwargs)
     return len(files) >= FILES_COUNT_MIN.get(kwargs.get('category'), 1)
 
-def _add_search(**search):
+def add_search(**search):
     if _media_exists(**search):
         return
 
@@ -57,122 +199,17 @@ def process_releases():
                 continue
 
         if valid:
-            _add_search(**Release().get_search(release))
+            add_search(**Release().get_search(release))
 
         Release().update({'_id': release['_id']},
                 {'$set': {'processed': datetime.utcnow()}}, safe=True)
 
-def _get_files_pattern(bases):
-    if not bases:
-        return
-    if not isinstance(bases, (tuple, list)):
-        bases = [bases]
-    return r'^(%s)' % '|'.join([re.escape(b) for b in bases])
-
-def _get_movies(bases=None):
-    '''Get a list of movies.
-
-    :return: list of tuples (movie, Media id)
-    '''
-    movies = {}
-    spec = {
-        'info.subtype': 'movies',
-        'extra.imdb': {'$exists': True},
-        }
-    if bases:
-        spec['files'] = {'$regex': _get_files_pattern(bases)}
-
-    for media in Media().find(spec):
-        if media['name'] not in movies:
-            movies[media['name']] = media['_id']
-    return movies.items()
-
-def _get_music(bases=None):
-    '''Get a list of music bands.
-
-    :return: list of tuples (band, Media id)
-    '''
-    bands = {}
-    spec = {
-        'info.subtype': 'music',
-        'info.artist': {'$nin': ['', 'va', 'various']},
-        }
-    if bases:
-        spec['files'] = {'$regex': _get_files_pattern(bases)}
-
-    for media in Media().find(spec):
-        band = media['info'].get('artist')
-        if band:
-            bands.setdefault(band, {'_id': media['_id'], 'count': 0})
-            bands[band]['count'] += len(media['files'])
-
-    res = []
-    for band, info in bands.items():
-        if info['count'] >= FILES_COUNT_MIN['music']:
-            res.append((band, info['_id']))
-    return res
-
-def _validate_history(args, history):
-    for info in history:
-        if args.get('name') != info.get('name'):
-            continue
-        if args.get('album') != info.get('album'):
-            continue
-        if args.get('category') != info.get('category'):
-            continue
-        return False
-    return True
-
-def _process_media(search):
-    search['history'] = search.get('history', [])
-
-    def process(args):
-        if _validate_history(args, search['history']) \
-                and _add_search(**args):
-            search['history'].insert(0, args)
-            return True
-
-    if search['category'] == 'movies':
-        for movie, media_id in randomize(_get_movies(search['paths'])):
-            logger.info('searching similar movies for "%s"', movie)
-
-            for similar_movie in similar_movies(movie, type='title',
-                    filters=settings.MEDIA_FILTERS):
-                if process({
-                        'name': similar_movie,
-                        'category': 'movies',
-                        'media_id': media_id,
-                        }):
-                    return True
-
-    elif search['category'] == 'music':
-        for band, media_id in randomize(_get_music(search['paths'])):
-            logger.info('searching similar bands for "%s"', band)
-
-            for similar_band, album in similar_music(band,
-                    filters=settings.MEDIA_FILTERS):
-                if process({
-                        'name': similar_band,
-                        'album': album,
-                        'category': 'music',
-                        'media_id': media_id,
-                        }):
-                    return True
-
 def process_media():
     for res in Similar().find():
-        date = res.get('processed')
-        if date and date + timedelta(hours=res['recurrence']) > datetime.utcnow():
-            continue
-
-        logger.info('processing %s paths %s', res['category'], res['paths'])
-
-        if not _process_media(res):
-            logger.info('failed to find similar %s from media in %s', res['category'], res['paths'])
-
-        res['history'] = res.get('history', [])[:HISTORY_LIMIT]
-        res['processed'] = datetime.utcnow()
-        Similar().save(res, safe=True)
+        search = SimilarSearch(res)
+        if search.validate():
+            search.process()
+            search.save()
 
 @loop(minutes=5)
 @timeout(hours=1)
