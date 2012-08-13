@@ -3,15 +3,14 @@ The media project worker.
 
 Features:
 
-- asynchronously search for torrents from multiple sites
-- fetch new releases from web sources (vcdquality releases, tvrage schedule, sputnikmusic reviews)
-- fetch new media matching releases filters (imdb rating, tvrage style, sputnikmusic rating)
-- fetch new media similar/related to the local media (movies directors and actors, music bands)
-- fetch movies subtitles
+- fetch new releases (scene releases, tv schedule, music reviews)
+- grab new media matching filters (rating, genre, date...)
+- grab similar media (directors movies, similar bands albums)
+- grab movies subtitles
 - unpack, clean and sort new media into the media type based directories
-- update media metadata from web sources (imdb, tvrage, sputnikmusic)
-- retrieve trailers and audio tracks urls for local media and new releases
-- sync media to network hosts
+- fetch media metadata (director, release date, etc)
+- retrieve media trailers and audio tracks urls
+- sync media to network hosts (e.g.: phones)
 
 
 Start the worker:
