@@ -1,7 +1,9 @@
 #!/usr/bin/env python
-import re
+import os.path
 from datetime import datetime, timedelta
 import logging
+
+from pymongo import ASCENDING
 
 from mediaworker import env, settings
 
@@ -11,13 +13,15 @@ from mediacore.model.release import Release
 from mediacore.model.similar import Similar
 from mediacore.model.media import Media
 from mediacore.model.search import Search
+from mediacore.model.worker import Worker
 from mediacore.web.google import Google
 from mediacore.web.info import similar_movies, similar_music
-from mediacore.util.util import randomize
 from mediacore.util.filter import validate_extra
 
 
-HISTORY_LIMIT = 100
+NAME = os.path.splitext(os.path.basename(__file__))[0]
+DELTA_SIMILAR_SEARCH = timedelta(hours=24)
+DELTA_SIMILAR_MAX = timedelta(days=365)
 SEARCH_LANGS = {
     'movies': settings.MOVIES_SEARCH_LANGS,
     'tv': settings.TV_SEARCH_LANGS,
@@ -29,146 +33,50 @@ FILES_COUNT_MIN = {'music': 3}
 logger = logging.getLogger(__name__)
 
 
-class SimilarSearch(dotdict):
+class SimilarMedia(dotdict):
     def __init__(self, doc):
-        super(SimilarSearch, self).__init__(doc)
-        self.category = self.get('category')
-        self.history = self.get('history', [])
-        self.processed = self.get('processed')
+        super(SimilarMedia, self).__init__(doc)
 
-    def validate(self):
-        if not self.processed:
-            return True
-        if self.processed < datetime.utcnow() - timedelta(hours=self.recurrence):
-            return True
-
-    def _validate_history(self, args):
-        for info in self.history:
-            if args.get('name') != info.get('name'):
-                continue
-            if args.get('album') != info.get('album'):
-                continue
-            if args.get('category') != info.get('category'):
-                continue
-            return False
-        return True
-
-    def _process_result(self, args):
-        if self._validate_history(args) and add_search(**args):
-            self.history.insert(0, args)
-            return True
-
-    def _get_similar_movies(self, media):
-        for similar_movie in similar_movies(media['name'], type='title',
-                filters=settings.MEDIA_FILTERS):
-            if self._process_result({
-                    'name': similar_movie,
-                    'category': 'movies',
-                    'media_id': media['_id'],
-                    }):
-                return True
-
-        logger.info('failed to find similar movies from "%s"', media['name'])
-
-    def _get_similar_music(self, media):
-        for similar_band, album in similar_music(media['info'].get('artist'),
-                filters=settings.MEDIA_FILTERS):
-            if self._process_result({
-                    'name': similar_band,
-                    'album': album,
-                    'category': 'music',
-                    'media_id': media['_id'],
-                    }):
-                return True
-
-        logger.info('failed to find similar music from "%s"', media['info'].get('artist'))
-
-    def get_similar(self, media_id):
-        media = Media().get(media_id)
-        if not media:
+    def _process_result(self, doc):
+        doc['category'] = self.info.get('subtype')
+        if Similar().find_one(doc):
             return
 
-        category = media['info'].get('subtype')
-        if category == 'movies':
-            return self._get_similar_movies(media)
-        elif category == 'music':
-            return self._get_similar_music(media)
+        doc['media_id'] = self._id
+        if add_search(**doc):
+            doc['created'] = datetime.utcnow()
+            Similar().insert(doc, safe=True)
 
-    def _get_files_pattern(self, bases):
-        if not bases:
-            return
-        if not isinstance(bases, (tuple, list)):
-            bases = [bases]
-        return r'^(%s)' % '|'.join([re.escape(b) for b in bases])
+            self.last_similar_search = datetime.utcnow()
+            Media().save(self, safe=True)
+            return True
 
-    def _get_movies_ids(self, bases=None):
-        '''Get a list of movies media ids.
+    def _get_similar_movies(self):
+        for movie in similar_movies(self.name, type='title',
+                filters=settings.MEDIA_FILTERS):
+            if self._process_result({'name': movie}):
+                return True
 
-        :return: list of tuples (movie, Media id)
-        '''
-        movies = {}
-        spec = {
-            'info.subtype': 'movies',
-            'extra.imdb': {'$exists': True},
-            }
-        if bases:
-            spec['files'] = {'$regex': self._get_files_pattern(bases)}
+        logger.info('failed to find similar movies from "%s"', self.name)
 
-        for media in Media().find(spec):
-            if media['name'] and media['name'] not in movies:
-                movies[media['name']] = media['_id']
-        return movies.values()
+    def _get_similar_music(self):
+        for artist, album in similar_music(self.info.get('artist'),
+                filters=settings.MEDIA_FILTERS):
+            if self._process_result({'name': artist, 'album': album}):
+                return True
 
-    def _get_music_ids(self, bases=None):
-        '''Get a list of music media ids.
-
-        :return: list of tuples (band, Media id)
-        '''
-        bands = {}
-        spec = {
-            'info.subtype': 'music',
-            'info.artist': {'$nin': ['', 'va', 'various']},
-            }
-        if bases:
-            spec['files'] = {'$regex': self._get_files_pattern(bases)}
-
-        for media in Media().find(spec):
-            band = media['info'].get('artist')
-            if band:
-                bands.setdefault(band, {'_id': media['_id'], 'count': 0})
-                bands[band]['count'] += len(media['files'])
-
-        res = []
-        for band, info in bands.items():
-            if info['count'] >= FILES_COUNT_MIN['music']:
-                res.append(info['_id'])
-        return res
-
-    def _get_media_ids(self):
-        res = []
-        if self.category == 'movies':
-            res = self._get_movies_ids(self.paths)
-        elif self.category == 'music':
-            res = self._get_music_ids(self.paths)
-        return res
+        logger.info('failed to find similar music from "%s"', self.info.get('artist'))
 
     @timeout(minutes=30)
     def process(self):
-        '''Process a similar search.
-        '''
-        if self.get('media_id'):
-            media_ids = [self.media_id]
-        else:
-            media_ids = randomize(self._get_media_ids())
+        category = self.info.get('subtype')
 
-        for media_id in media_ids:
-            if self.get_similar(media_id):
-                return True
+        logger.info('searching similar %s for "%s"', category, self.name)
 
-    def save(self):
-        self.history = self.history[:HISTORY_LIMIT]
-        self.processed = datetime.utcnow()
-        Similar().save(self, safe=True)
+        if category == 'movies':
+            return self._get_similar_movies()
+        elif category == 'music':
+            return self._get_similar_music()
 
 
 def _media_exists(**kwargs):
@@ -183,6 +91,19 @@ def add_search(**search):
     if Search().add(**search):
         logger.info('added search %s', search)
         return True
+
+def process_media():
+    if not validate_similar():
+        return
+    for media in Media().find({'similar_search': True},
+            sort=[('last_similar_search', ASCENDING)]):
+        if SimilarMedia(media).process():
+            break
+
+    Worker().set_attr(NAME, 'similar_search', datetime.utcnow())
+
+    Similar().remove({'created': {'$lt': datetime.utcnow() - DELTA_SIMILAR_MAX}},
+            safe=True)
 
 def process_releases():
     for release in Release().find({
@@ -204,12 +125,10 @@ def process_releases():
         Release().update({'_id': release['_id']},
                 {'$set': {'processed': datetime.utcnow()}}, safe=True)
 
-def process_media():
-    for res in Similar().find():
-        search = SimilarSearch(res)
-        if search.validate():
-            search.process()
-            search.save()
+def validate_similar():
+    res = Worker().get_attr(NAME, 'similar_search')
+    if not res or res < datetime.utcnow() - DELTA_SIMILAR_SEARCH:
+        return True
 
 @loop(minutes=5)
 @timeout(hours=1)

@@ -18,9 +18,9 @@ from mediacore.util.title import Title
 
 
 DELTA_SEARCH = {
-    'once': timedelta(hours=12),
-    'inc': timedelta(hours=12),
-    'ever': timedelta(hours=24),
+    'once': timedelta(hours=6),
+    'inc': timedelta(hours=6),
+    'ever': timedelta(hours=12),
     }
 DELTA_FILES_SEARCH = timedelta(hours=1)
 DELTA_RESULT = {
@@ -33,8 +33,8 @@ DELTA_IDLE_SEARCH = timedelta(days=2)
 DELTA_OBSOLETE = timedelta(days=30)
 DELTA_NEXT_SEASON = timedelta(days=60)
 DELTA_RESULTS_MAX = timedelta(days=180)
-SEARCH_LIMIT = 10
 PAGES_MAX = 20
+SEARCH_LIMIT = 10
 NB_SEEDS_MIN = {
     'once': 0,
     'inc': 10,
@@ -219,7 +219,6 @@ class Search(dotdict):
 
 def process():
     for res in MSearch().find(sort=[('session.last_search', ASCENDING)],
-            limit=SEARCH_LIMIT,
             timeout=False):
         search = Search(res)
         if search.validate():
