@@ -1,7 +1,6 @@
 import os.path
 import logging
 
-from mediaworker import env
 from mediaworker.settings import PATHS_FINISHED, PATHS_MEDIA_NEW
 
 from systools.system import loop, timeout, timer

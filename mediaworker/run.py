@@ -2,7 +2,7 @@
 import logging
 from logging.handlers import RotatingFileHandler
 
-from mediaworker import env, settings, get_factory
+from mediaworker import settings, get_factory
 
 from systools.system import get_package_modules
 

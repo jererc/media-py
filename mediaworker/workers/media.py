@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timedelta
 import logging
 
-from mediaworker import env, settings, get_factory
+from mediaworker import settings, get_factory
 
 from systools.system import loop, timer
 

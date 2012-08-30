@@ -4,7 +4,7 @@ import logging
 
 from pymongo import DESCENDING
 
-from mediaworker import env, settings, get_factory
+from mediaworker import settings, get_factory
 
 from systools.system import loop, timer
 
