@@ -66,8 +66,8 @@ def _sync(host, src, dst):
     if not isinstance(src, (tuple, list)):
         src = [src]
 
-    started = datetime.utcnow()
     for src_ in src:
+        started = datetime.utcnow()
         try:
             host.sftpsync(src_, dst, download=False, delete=True)
             logger.info('synced %s with %s@%s:%s in %s', src_, host.username, host.host, dst, datetime.utcnow() - started)

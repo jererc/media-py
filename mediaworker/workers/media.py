@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import os.path
 import re
+import time
 from datetime import datetime, timedelta
 import logging
 
@@ -31,6 +32,7 @@ def update(path):
     for file in iter_files(path):
         if not RE_FILE_EXCL.search(file):
             Media().add(file)
+        time.sleep(.05)
 
     for media in Media().find():
         files_orig = media['files'][:]
