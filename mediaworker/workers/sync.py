@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import os.path
 from datetime import datetime, timedelta
 import logging
@@ -125,7 +124,3 @@ def process_syncs():
 
 def main():
     process_syncs()
-
-
-if __name__ == '__main__':
-    main()

@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import os.path
 import logging
 
@@ -39,7 +38,3 @@ def process_downloads():
 
 def main():
     process_downloads()
-
-
-if __name__ == '__main__':
-    main()

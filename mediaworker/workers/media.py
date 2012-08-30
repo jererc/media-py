@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import os.path
 import re
 import time
@@ -52,7 +51,3 @@ def main():
     target = '%s.workers.media.update' % settings.PACKAGE_NAME
     get_factory().add(target=target,
             args=(settings.PATH_MEDIA_ROOT,), timeout=TIMEOUT_UPDATE)
-
-
-if __name__ == '__main__':
-    main()

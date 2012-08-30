@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import os.path
 from datetime import datetime, timedelta
 import shutil
@@ -181,7 +180,3 @@ def process_subtitles():
 
 def main():
     process_subtitles()
-
-
-if __name__ == '__main__':
-    main()

@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import os.path
 from datetime import datetime, timedelta
 import logging
@@ -158,7 +157,3 @@ def process_seek():
 
 def main():
     process_seek()
-
-
-if __name__ == '__main__':
-    main()

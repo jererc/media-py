@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 from datetime import datetime, timedelta
 import logging
 
@@ -101,7 +100,3 @@ def process_extra():
 
 def main():
     process_extra()
-
-
-if __name__ == '__main__':
-    main()

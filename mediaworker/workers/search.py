@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 from datetime import datetime, timedelta
 import logging
 from copy import copy
@@ -251,7 +250,3 @@ def process_searches():
 
 def main():
     process_searches()
-
-
-if __name__ == '__main__':
-    main()

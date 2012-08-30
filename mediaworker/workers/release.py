@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import os.path
 from datetime import datetime, timedelta
 import logging
@@ -120,7 +119,3 @@ def update():
 
 def main():
     update()
-
-
-if __name__ == '__main__':
-    main()

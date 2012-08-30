@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import os.path
 from datetime import datetime, timedelta
 import logging
@@ -93,7 +92,3 @@ def manage_transmission():
 
 def main():
     manage_transmission()
-
-
-if __name__ == '__main__':
-    main()
