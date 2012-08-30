@@ -3,9 +3,9 @@ import os.path
 from datetime import datetime, timedelta
 import logging
 
-from mediaworker import env
+from mediaworker import env, settings, get_factory
 
-from systools.system import loop, timeout, timer
+from systools.system import loop, timer
 
 from mediacore.model.release import Release
 from mediacore.model.worker import Worker
@@ -17,6 +17,7 @@ from mediacore.util.title import clean
 
 
 NAME = os.path.splitext(os.path.basename(__file__))[0]
+TIMEOUT_IMPORT = 600    # seconds
 DELTA_IMPORT = timedelta(hours=2)
 DELTA_RELEASE = timedelta(days=90)
 VCDQUALITY_PAGES_MAX = 10
@@ -26,9 +27,9 @@ TV_EPISODE_MAX = 20  # maximum episode number for new releases
 logger = logging.getLogger(__name__)
 
 
-def import_vcdquality(pages_max, age_max):
-    for res in Vcdquality().results(pages_max=pages_max):
-        if res['date'] < datetime.utcnow() - age_max:
+def _import_vcdquality():
+    for res in Vcdquality().results(pages_max=VCDQUALITY_PAGES_MAX):
+        if res['date'] < datetime.utcnow() - DELTA_RELEASE:
             continue
 
         name = clean(res['release'], 7)
@@ -48,7 +49,7 @@ def import_vcdquality(pages_max, age_max):
                     }, safe=True)
             logger.info('added movies release "%s"', name)
 
-def import_tvrage(age_max):
+def _import_tvrage():
     for res in Tvrage().scheduled_shows():
         if not res.get('url') or not res.get('season') or not res.get('episode'):
             continue
@@ -72,11 +73,11 @@ def import_tvrage(age_max):
                     }, safe=True)
             logger.info('added tv release "%s"', name)
 
-def import_sputnikmusic(age_max):
+def _import_sputnikmusic():
     for res in Sputnikmusic().reviews():
         if not res.get('artist') or not res.get('album') or not res.get('rating'):
             continue
-        if not res.get('date') or res['date'] < datetime.utcnow() - age_max:
+        if not res.get('date') or res['date'] < datetime.utcnow() - DELTA_RELEASE:
             continue
 
         name = '%s - %s' % (res['artist'], res['album'])
@@ -98,24 +99,27 @@ def import_sputnikmusic(age_max):
                     }, safe=True)
             logger.info('added music release "%s"', name)
 
-def validate_import():
-    res = Worker().get_attr(NAME, 'imported')
-    if not res or res < datetime.utcnow() - DELTA_IMPORT:
-        return True
-
-@loop(minutes=2)
-@timeout(hours=2)
 @timer()
-def main():
-    if validate_import() and Google().accessible:
-        import_vcdquality(VCDQUALITY_PAGES_MAX, DELTA_RELEASE)
-        import_tvrage(DELTA_RELEASE)
-        import_sputnikmusic(DELTA_RELEASE)
+def import_releases(type):
+    res = Worker().get_attr(NAME, type)
+    if not res or res < datetime.utcnow() - DELTA_IMPORT:
+        globals().get('_import_%s' % type)()
+        Worker().set_attr(NAME, type, datetime.utcnow())
 
-        Worker().set_attr(NAME, 'imported', datetime.utcnow())
+@loop(minutes=5)
+def update():
+    if Google().accessible:
+        factory = get_factory()
+
+        for type in ('vcdquality', 'tvrage', 'sputnikmusic'):
+            target = '%s.workers.release.import_releases' % settings.PACKAGE_NAME
+            factory.add(target=target, args=(type,), timeout=TIMEOUT_IMPORT)
 
         Release().remove({'date': {'$lt': datetime.utcnow() - DELTA_RELEASE}},
                 safe=True)
+
+def main():
+    update()
 
 
 if __name__ == '__main__':

@@ -1,59 +1,36 @@
 #!/usr/bin/env python
-import os
+import os.path
 import re
 from datetime import datetime, timedelta
 import logging
 
-from mediaworker import env, settings
+from mediaworker import env, settings, get_factory
 
-from systools.system import loop, timeout, timer
+from systools.system import loop, timer
 
-from mediacore.model.path import Path
 from mediacore.model.media import Media
+from mediacore.model.worker import Worker
 from mediacore.util.media import iter_files
 
 
-PATHS_DEF = { # path: recurrence (hours)
-    settings.PATH_MEDIA_ROOT: 24,
-    settings.PATHS_MEDIA_NEW['video']: 1,
-    settings.PATHS_MEDIA_NEW['audio']: 1,
-    }
+NAME = os.path.splitext(os.path.basename(__file__))[0]
+TIMEOUT_UPDATE = 3600 * 6   # seconds
+DELTA_UPDATE = timedelta(hours=12)
 RE_FILE_EXCL = re.compile(r'^(%s)/' % '|'.join([re.escape(p) for p in settings.PATHS_EXCLUDE]))
 
 
 logger = logging.getLogger(__name__)
 
 
-@timeout(hours=6)
 @timer()
-def update_path(path):
-    logger.info('started to update path %s', path)
-
-    Path().update({'path': path},
-            {'$set': {'started': datetime.utcnow()}}, safe=True)
+def update(path):
+    res = Worker().get_attr(NAME, 'updated')
+    if res and res > datetime.utcnow() - DELTA_UPDATE:
+        return
 
     for file in iter_files(path):
         if not RE_FILE_EXCL.search(file):
             Media().add(file)
-
-    Path().update({'path': path},
-            {'$set': {'processed': datetime.utcnow()}}, safe=True)
-
-def update():
-    for path, recurrence in PATHS_DEF.items():
-        res = Path().find_one({'path': path})
-        if not res:
-            Path().insert({'path': path}, safe=True)
-        else:
-            date = res.get('processed')
-            if date and date + timedelta(hours=recurrence) > datetime.utcnow():
-                continue
-
-        update_path(path)
-
-@timer()
-def clean():
-    Path().remove({'path': {'$nin': PATHS_DEF.keys()}}, safe=True)
 
     for media in Media().find():
         files_orig = media['files'][:]
@@ -66,10 +43,13 @@ def clean():
         elif media['files'] != files_orig:
             Media().save(media, safe=True)
 
-@loop(minutes=10)
+    Worker().set_attr(NAME, 'updated', datetime.utcnow())
+
+@loop(minutes=15)
 def main():
-    update()
-    clean()
+    target = '%s.workers.media.update' % settings.PACKAGE_NAME
+    get_factory().add(target=target,
+            args=(settings.PATH_MEDIA_ROOT,), timeout=TIMEOUT_UPDATE)
 
 
 if __name__ == '__main__':

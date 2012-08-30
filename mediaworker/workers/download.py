@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import os
+import os.path
 import logging
 
 from mediaworker import env
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 @loop(30)
 @timeout(hours=4)
 @timer()
-def main():
+def process_downloads():
     for path in PATHS_FINISHED.values():
         if not os.path.exists(path):
             continue
@@ -36,6 +36,9 @@ def main():
             if res:
                 Media().add(res)
                 logger.info('moved %s to %s', download.filename, PATHS_MEDIA_NEW[download.type])
+
+def main():
+    process_downloads()
 
 
 if __name__ == '__main__':

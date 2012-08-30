@@ -1,8 +1,10 @@
 import re
+from datetime import timedelta
 
+
+PACKAGE_NAME = 'mediaworker'
 
 DB_NAME = 'mediaworker'
-
 
 # Data
 PATH_MEDIA_ROOT = '/home/user'
@@ -19,7 +21,6 @@ PATH_INVALID_DOWNLOAD = '/home/user/misc/invalid'
 PATHS_EXCLUDE = []
 PATH_TMP = '/tmp'
 
-
 # Search results filters
 re_incl_movies = re.compile(r'\b(br|bd|dvd|hd)rip\b', re.I)
 re_incl_tv = re.compile(r'\b([hp]dtv|dsr(ip)?)\b', re.I)
@@ -35,12 +36,10 @@ SEARCH_FILTERS = {    # size ranges in MB, title inclusions and exclusions
     'tv': {'size_min': 100, 'size_max': 1000, 're_incl_raw': re_incl_tv, 're_excl_raw': re_excl_video},
     }
 
-
 # Search langs
 MOVIES_SEARCH_LANGS = ['en']
 TV_SEARCH_LANGS = ['en']
 SUBTITLES_SEARCH_LANGS = ['en']
-
 
 # Media filters
 MEDIA_FILTERS = {
@@ -61,18 +60,22 @@ MEDIA_FILTERS = {
         },
     }
 
+# Similar search
+SIMILAR_DELTA = {
+    'movies': timedelta(days=2),
+    'tv': timedelta(days=7),
+    'music': timedelta(days=2),
+    }
 
 # Credentials
 OPENSUBTITLES_USERNAME = ''
 OPENSUBTITLES_PASSWORD = ''
-
 
 # Transmission
 TRANSMISSION_HOST = 'localhost'
 TRANSMISSION_PORT = 9091
 TRANSMISSION_USERNAME = None
 TRANSMISSION_PASSWORD = None
-
 
 # Logging
 LOG_FORMAT = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'

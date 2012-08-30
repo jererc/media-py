@@ -5,9 +5,9 @@ from copy import copy
 
 from pymongo import ASCENDING
 
-from mediaworker import env, settings
+from mediaworker import env, settings, get_factory
 
-from systools.system import loop, timeout, timer, dotdict
+from systools.system import loop, timer, dotdict
 
 from mediacore.model.search import Search as MSearch
 from mediacore.model.media import Media
@@ -17,6 +17,8 @@ from mediacore.web.google import Google
 from mediacore.util.title import Title
 
 
+WORKERS_LIMIT = 5
+TIMEOUT_SEARCH = 1800    # seconds
 DELTA_SEARCH = {
     'once': timedelta(hours=6),
     'inc': timedelta(hours=6),
@@ -106,7 +108,7 @@ class Search(dotdict):
         MSearch().save(self, safe=True)
 
     def _is_obsolete(self):
-        # TODO: handle handle obsolete episodes searches
+        # TODO: handle obsolete episodes searches
         if self.mode in ('inc', 'ever'):
             return
         date = self.session['last_result'] or self.session['first_search']
@@ -167,8 +169,6 @@ class Search(dotdict):
 
         return True
 
-    @timeout(minutes=30)
-    @timer(300)
     def process(self):
         query = self._get_query()
 
@@ -217,23 +217,40 @@ class Search(dotdict):
 
         MSearch().save(self, safe=True)
 
-def process():
-    for res in MSearch().find(sort=[('session.last_search', ASCENDING)],
-            timeout=False):
-        search = Search(res)
-        if search.validate():
-            search.process()
-            search.save()
+
+@timer(300)
+def process_search(search_id):
+    search = MSearch().get(search_id)
+    if not search:
+        return
+    search = Search(search)
+    search.process()
+    search.save()
 
 @loop(60)
-@timeout(hours=2)
-@timer()
-def main():
+def process_searches():
     if Google().accessible:
-        process()
+        count = 0
+
+        for search in MSearch().find(
+                sort=[('session.last_search', ASCENDING)]):
+            search = Search(search)
+            if not search.validate():
+                continue
+
+            target = '%s.workers.search.process_search' % settings.PACKAGE_NAME
+            get_factory().add(target=target,
+                    args=(search._id,), timeout=TIMEOUT_SEARCH)
+
+            count += 1
+            if count == WORKERS_LIMIT:
+                break
 
     Result().remove({'created': {'$lt': datetime.utcnow() - DELTA_RESULTS_MAX}},
             safe=True)
+
+def main():
+    process_searches()
 
 
 if __name__ == '__main__':
