@@ -93,10 +93,7 @@ def update_extra(objtype):
             break
 
 @loop(minutes=2)
-def process_extra():
+def run():
     if Google().accessible:
         for objtype in ('media', 'release', 'search'):
             update_extra(objtype)
-
-def main():
-    process_extra()

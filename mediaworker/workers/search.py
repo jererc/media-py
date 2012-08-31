@@ -227,7 +227,7 @@ def process_search(search_id):
     search.save()
 
 @loop(60)
-def process_searches():
+def run():
     if Google().accessible:
         count = 0
 
@@ -247,6 +247,3 @@ def process_searches():
 
     Result().remove({'created': {'$lt': datetime.utcnow() - DELTA_RESULTS_MAX}},
             safe=True)
-
-def main():
-    process_searches()

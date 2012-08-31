@@ -47,7 +47,7 @@ def update(path):
     Worker().set_attr(NAME, 'updated', datetime.utcnow())
 
 @loop(minutes=15)
-def main():
+def run():
     target = '%s.workers.media.update' % settings.PACKAGE_NAME
     get_factory().add(target=target,
             args=(settings.PATH_MEDIA_ROOT,), timeout=TIMEOUT_UPDATE)

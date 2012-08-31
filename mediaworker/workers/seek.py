@@ -149,11 +149,8 @@ def process_releases():
                 {'$set': {'processed': datetime.utcnow()}}, safe=True)
 
 @loop(minutes=5)
-def process_seek():
+def run():
     if Google().accessible:
         process_media()
 
     process_releases()
-
-def main():
-    process_seek()

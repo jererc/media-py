@@ -80,15 +80,17 @@ def process_sync(sync_id):
     sync = Sync().get(sync_id)
     if not sync:
         return
-    # TODO: do not block the workers queue if no host
     host = get_host(username=sync['username'], password=sync['password'])
     if not host:
         return
 
     if sync.get('media_id'):
         src = Media().get_bases(sync['media_id'], dirs_only=True)
-        if src and _sync(host, src, sync['dst']):
-            Sync().remove({'_id': sync['_id']}, safe=True)
+        if not src:
+            logger.info('failed to find path for media %s', sync['media_id'])
+        else:
+            _sync(host, src, sync['dst'])
+        Sync().remove({'_id': sync['_id']}, safe=True)
 
     else:
         sync['started'] = datetime.utcnow()
@@ -109,7 +111,7 @@ def process_sync(sync_id):
             Sync().save(sync, safe=True)
 
 @loop(60)
-def process_syncs():
+def run():
     for sync in Sync().find({
             '$or': [
                 {'processed': {'$exists': False}},
@@ -121,6 +123,3 @@ def process_syncs():
         target = '%s.workers.sync.process_sync' % settings.PACKAGE_NAME
         get_factory().add(target=target,
                 args=(sync['_id'],), timeout=TIMEOUT_SYNC)
-
-def main():
-    process_syncs()

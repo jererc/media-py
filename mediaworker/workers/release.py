@@ -106,7 +106,7 @@ def import_releases(type):
         Worker().set_attr(NAME, type, datetime.utcnow())
 
 @loop(minutes=5)
-def update():
+def run():
     if Google().accessible:
         factory = get_factory()
 
@@ -116,6 +116,3 @@ def update():
 
         Release().remove({'date': {'$lt': datetime.utcnow() - DELTA_RELEASE}},
                 safe=True)
-
-def main():
-    update()

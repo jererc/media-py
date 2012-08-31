@@ -31,7 +31,7 @@ def main():
 
     for module in get_package_modules(WORKERS_DIR):
         if module != '__init__':
-            target = '%s.%s.%s.main' % (settings.PACKAGE_NAME, WORKERS_DIR, module)
+            target = '%s.%s.%s.run' % (settings.PACKAGE_NAME, WORKERS_DIR, module)
             factory.add(target=target, daemon=True)
 
     factory.run()

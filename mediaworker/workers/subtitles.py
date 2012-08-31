@@ -100,7 +100,7 @@ def _update_subtitles(video_file):
     return subtitles
 
 @timer(30)
-def search_media_subtitles(media_id):
+def search_subtitles(media_id):
     media = Media().get(media_id)
     if not media:
         return
@@ -144,7 +144,7 @@ def search_media_subtitles(media_id):
     media['subtitles'] = sorted(list(set(subtitles)))
     Media().save(media, safe=True)
 
-def search_subtitles():
+def process_media():
     count = 0
 
     for media in Media().find({
@@ -156,7 +156,7 @@ def search_subtitles():
             },
             sort=[('last_sub_search', ASCENDING)]):
         if [f for f in media['files'] if f.startswith(PATH_ROOT)]:
-            target = '%s.workers.subtitles.search_media_subtitles' % settings.PACKAGE_NAME
+            target = '%s.workers.subtitles.search_subtitles' % settings.PACKAGE_NAME
             get_factory().add(target=target,
                     args=(media['_id'],), timeout=TIMEOUT_SEARCH)
 
@@ -174,9 +174,6 @@ def update_quota():
         Worker().set_attr(NAME, 'quota_reached', datetime.utcnow())
 
 @loop(minutes=2)
-def process_subtitles():
+def run():
     if validate_quota() and Google().accessible:
-        search_subtitles()
-
-def main():
-    process_subtitles()
+        process_media()

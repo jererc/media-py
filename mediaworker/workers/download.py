@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 @loop(30)
 @timeout(hours=4)
 @timer()
-def process_downloads():
+def run():
     for path in PATHS_FINISHED.values():
         if not os.path.exists(path):
             continue
@@ -34,6 +34,3 @@ def process_downloads():
             if res:
                 Media().add(res)
                 logger.info('moved %s to %s', download.filename, PATHS_MEDIA_NEW[download.type])
-
-def main():
-    process_downloads()
