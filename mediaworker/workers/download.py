@@ -1,10 +1,12 @@
 import os.path
+from datetime import datetime
 import logging
 
 from mediaworker.settings import PATHS_FINISHED, PATHS_MEDIA_NEW
 
 from systools.system import loop, timeout, timer
 
+from mediacore.model.download import Download
 from mediacore.model.media import Media
 from mediacore.util.download import downloads, check_download
 from mediacore.util.media import remove_file, move_file
@@ -33,4 +35,10 @@ def run():
             res = move_file(download.file, PATHS_MEDIA_NEW[download.type])
             if res:
                 Media().add(res)
+                Download().insert({
+                        'name': download.filename,
+                        'category': download.type,
+                        'path': PATHS_MEDIA_NEW[download.type],
+                        'created': datetime.utcnow(),
+                        }, safe=True)
                 logger.info('moved %s to %s', download.filename, PATHS_MEDIA_NEW[download.type])

@@ -16,6 +16,7 @@ from mediacore.web.google import Google
 from mediacore.web.opensubtitles import (Opensubtitles,
         OpensubtitlesError, DownloadQuotaReached)
 from mediacore.util.media import get_file, get_clean_filename, get_size
+from mediacore.util.title import clean
 
 
 NAME = os.path.splitext(os.path.basename(__file__))[0]
@@ -118,7 +119,7 @@ def search_subtitles(media_id):
             continue
 
         if info['subtype'] == 'tv':
-            name = info.get('name')
+            name = clean(info.get('name'), 6)
             season = info.get('season')
             episode = info.get('episode')
             date = None
