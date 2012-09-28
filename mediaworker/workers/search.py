@@ -103,11 +103,11 @@ class Search(dotdict):
             logger.info('removed %s search "%s": found %s', self.category, self._get_query(), files)
             return True
 
-        self.session['last_files_search'] = datetime.utcnow()
-        MSearch().save(self, safe=True)
+        MSearch().update({'_id': self._id},
+                {'$set': {'session.last_files_search': datetime.utcnow()}},
+                safe=True)
 
     def _is_obsolete(self):
-        # TODO: handle obsolete episodes searches
         if self.mode in ('inc', 'ever'):
             return
         date = self.session['last_result'] or self.session['first_search']
