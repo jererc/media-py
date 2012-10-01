@@ -55,9 +55,9 @@ class TransmissionManager(Transmission):
 
                 logger.info('added torrent %s to transmission', res['title'].encode('utf-8'))
             except TorrentExists, e:
-                logger.info('torrent %s (%s) already exists: %s', res['title'].encode('utf-8'), res['hash'], e)
+                logger.info('torrent %s (%s) already exists: %s', res['title'].encode('utf-8'), res['hash'], str(e))
             except TransmissionError, e:
-                logger.error('failed to add torrent %s (%s): %s', res['title'].encode('utf-8'), res['hash'], e)
+                logger.error('failed to add torrent %s (%s): %s', res['title'].encode('utf-8'), res['hash'], str(e))
                 continue
 
             Result().update({'_id': res['_id']},

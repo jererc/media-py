@@ -63,7 +63,7 @@ def _search_opensubtitles(video_file, name, season, episode, date=None):
                         logger.info('saved %s', file_dst)
                 except DownloadQuotaReached, e:
                     update_quota()
-                    logger.info(e)
+                    logger.info(str(e))
                     raise Exception
 
         except OpensubtitlesError:

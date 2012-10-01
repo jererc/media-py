@@ -71,7 +71,7 @@ def _sync(host, src, dst):
             host.sftpsync(src_, dst, download=False, delete=True)
             logger.info('synced %s with %s@%s:%s in %s', src_, host.username, host.host, dst, datetime.utcnow() - started)
         except Exception, e:
-            logger.info('failed to sync %s with %s@%s:%s: %s', src_, host.username, host.host, dst, e)
+            logger.info('failed to sync %s with %s@%s:%s: %s', src_, host.username, host.host, dst, str(e))
             return
     return True
 
