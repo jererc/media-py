@@ -16,6 +16,7 @@ PATHS_MEDIA_NEW = {
     }
 PATHS_FINISHED = {
     'transmission': '/home/user/.transmission/finished', # must be different than the download dir
+    'grab': '/home/user/finished',
     }
 PATH_INVALID_DOWNLOAD = '/home/user/misc/invalid'
 PATHS_EXCLUDE = []

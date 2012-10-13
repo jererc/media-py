@@ -43,26 +43,20 @@ class TransmissionManager(Transmission):
                     kwargs=kwargs, timeout=TIMEOUT_MANAGE)
 
     def add_torrents(self):
-        for res in Result().find({
-                'processed': False,
-                'url_magnet': {'$ne': None},
-                }):
+        for res in Result().find({'processed': False, 'type': 'magnet'}):
             try:
-                self.add(res['url_magnet'])
-
+                self.add(res['url'])
                 Search().update({'_id': res['search_id']},
                         {'$addToSet': {'hashes': res['hash']}}, safe=True)
-
-                logger.info('added torrent %s to transmission', res['title'].encode('utf-8'))
+                logger.info('added torrent "%s" to transmission', res['title'].encode('utf-8'))
             except TorrentExists, e:
-                logger.info('torrent %s (%s) already exists: %s', res['title'].encode('utf-8'), res['hash'], str(e))
+                logger.info('torrent "%s" (%s) already exists: %s', res['title'].encode('utf-8'), res['hash'], str(e))
             except TransmissionError, e:
-                logger.error('failed to add torrent %s (%s): %s', res['title'].encode('utf-8'), res['hash'], str(e))
+                logger.error('failed to add torrent "%s" (%s): %s', res['title'].encode('utf-8'), res['hash'], str(e))
                 continue
 
             Result().update({'_id': res['_id']},
-                    {'$set': {'processed': datetime.utcnow()}},
-                    safe=True)
+                    {'$set': {'processed': datetime.utcnow()}}, safe=True)
 
     def clean(self):
         res = Worker().get_attr(NAME, 'cleaned')

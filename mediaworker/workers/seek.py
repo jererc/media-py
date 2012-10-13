@@ -28,7 +28,6 @@ SEARCH_LANGS = {
     }
 FILES_COUNT_MIN = {'music': 3}
 
-
 logger = logging.getLogger(__name__)
 
 

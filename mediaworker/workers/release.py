@@ -22,7 +22,6 @@ DELTA_RELEASE = timedelta(days=90)
 VCDQUALITY_PAGES_MAX = 10
 TV_EPISODE_MAX = 20  # maximum episode number for new releases
 
-
 logger = logging.getLogger(__name__)
 
 

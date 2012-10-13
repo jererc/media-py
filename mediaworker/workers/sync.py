@@ -19,7 +19,6 @@ WORKERS_LIMIT = 4
 TIMEOUT_SYNC = 3600 * 6     # seconds
 DELTA_UPDATE = timedelta(hours=6)
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -30,7 +29,10 @@ def get_recent_media(category, genre=None, count_max=None, size_max=None):
     dirs = []
     size = 0
 
-    spec = {'info.subtype': category}
+    spec = {
+        'info.subtype': category,
+        'date': {'$exists': True},
+        }
     if genre:
         val = {'$regex': r'\b%s\b' % '|'.join(genre), '$options': 'i'}
         if category == 'movies':
@@ -41,7 +43,7 @@ def get_recent_media(category, genre=None, count_max=None, size_max=None):
                 {'extra.lastfm.genre': val},
                 ]
 
-    for media in Media().find(spec, sort=[('created', DESCENDING)]):
+    for media in Media().find(spec, sort=[('date', DESCENDING)]):
         dirs_ = Media().get_bases(media['_id'], dirs_only=True)
         if not dirs_:
             continue
@@ -80,7 +82,7 @@ def process_sync(sync_id):
     sync = Sync().get(sync_id)
     if not sync:
         return
-    host = get_host(username=sync['username'], password=sync['password'])
+    host = get_host(user=sync['user'])
     if not host:
         return
 

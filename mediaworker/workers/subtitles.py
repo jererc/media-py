@@ -31,7 +31,6 @@ OPENSUBTITLES_LANGS = {
     }
 DELTA_QUOTA_REACHED = timedelta(hours=12)
 
-
 logger = logging.getLogger(__name__)
 
 

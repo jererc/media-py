@@ -1,4 +1,4 @@
-import os.path
+import os
 import re
 import time
 from datetime import datetime, timedelta
@@ -18,12 +18,11 @@ TIMEOUT_UPDATE = 3600 * 6   # seconds
 DELTA_UPDATE = timedelta(hours=12)
 RE_FILE_EXCL = re.compile(r'^(%s)/' % '|'.join([re.escape(p) for p in settings.PATHS_EXCLUDE]))
 
-
 logger = logging.getLogger(__name__)
 
 
 @timer()
-def update(path):
+def update_path(path):
     res = Worker().get_attr(NAME, 'updated')
     if res and res > datetime.utcnow() - DELTA_UPDATE:
         return
@@ -46,8 +45,31 @@ def update(path):
 
     Worker().set_attr(NAME, 'updated', datetime.utcnow())
 
+def get_mtime(files):
+    dates = []
+    for file in files:
+        try:
+            date = os.stat(file).st_mtime
+        except OSError:
+            continue
+        date = datetime.utcfromtimestamp(date)
+        dates.append(date)
+    if dates:
+        return sorted(dates)[0]
+
+@timer()
+def update_media():
+    for res in Media().find():
+        mtime = get_mtime(res['files'])
+        if mtime:
+            Media().update({'_id': res['_id']},
+                    {'$set': {'date': mtime}}, safe=True)
+
 @loop(minutes=15)
 def run():
-    target = '%s.workers.media.update' % settings.PACKAGE_NAME
+    target = '%s.workers.media.update_path' % settings.PACKAGE_NAME
     get_factory().add(target=target,
             args=(settings.PATH_MEDIA_ROOT,), timeout=TIMEOUT_UPDATE)
+
+    target = '%s.workers.media.update_media' % settings.PACKAGE_NAME
+    get_factory().add(target=target, timeout=TIMEOUT_UPDATE)

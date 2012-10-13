@@ -11,7 +11,7 @@ from systools.system import loop, timer, dotdict
 from mediacore.model.search import Search as MSearch
 from mediacore.model.media import Media
 from mediacore.model.result import Result
-from mediacore.web.torrent import results
+from mediacore.web.search import results
 from mediacore.web.google import Google
 from mediacore.util.title import Title
 
@@ -43,7 +43,6 @@ NB_SEEDS_MIN = {
     }
 FILES_COUNT_MIN = {'music': 3}
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -57,10 +56,10 @@ class Search(dotdict):
         if session.get('nb_downloads') == 0 \
                 and session.get('nb_errors') == 0 \
                 and session.get('nb_pending') == 0:
-            sort_results = 'age'
+            sort_results = 'date'
             pages_max = 1
         else:
-            sort_results = 'seeds'
+            sort_results = 'popularity'
             pages_max = PAGES_MAX
 
         self.session = {
@@ -157,13 +156,14 @@ class Search(dotdict):
     def _validate_result(self, result):
         '''Check result dynamic attributes.
         '''
-        if result.date and result.date > datetime.utcnow() - DELTA_RESULT[self.mode]:
-            logger.info('filtered "%s" (%s): too recent (%s)', result.title, result.net_name, result.date)
+        date = result.get('date')
+        if date and date > datetime.utcnow() - DELTA_RESULT[self.mode]:
+            logger.info('filtered "%s" (%s): too recent (%s)', result.title, result.plugin, date)
             return False
 
         seeds = result.get('seeds')
         if seeds is not None and seeds < NB_SEEDS_MIN[self.mode]:
-            logger.info('filtered "%s" (%s): not enough seeds (%s)', result.title, result.net_name, seeds)
+            logger.info('filtered "%s" (%s): not enough seeds (%s)', result.title, result.plugin, seeds)
             return False
 
         return True
@@ -181,7 +181,11 @@ class Search(dotdict):
             if not result:
                 self.session['nb_errors'] += 1
                 continue
-            if Result().find_one({'hash': result.hash}):
+
+            if result.get('hash'):
+                if Result().find_one({'hash': result.hash}):
+                    continue
+            elif Result().find_one({'url': result.url}):
                 continue
 
             self.session['nb_results'] += 1
@@ -196,7 +200,7 @@ class Search(dotdict):
             result_id = Result().insert(result, safe=True)
             self.results.insert(0, result_id)
             self.session['nb_downloads'] += 1
-            logger.info('found "%s" on %s', result.title, result.net_name)
+            logger.info('found "%s" on %s', result.title, result.plugin)
 
             if self.mode != 'ever':
                 break
