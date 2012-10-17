@@ -25,8 +25,8 @@ PATH_TMP = '/tmp'
 # Search results filters
 re_incl_movies = re.compile(r'\b(br|bd|dvd|hd)rip\b', re.I)
 re_incl_tv = re.compile(r'\b([hp]dtv|dsr(ip)?)\b', re.I)
-re_excl_video = re.compile(r'\b(720|1080)p\b', re.I)
-re_excl_anime = re.compile(r'\b(720|1080)p\b', re.I)
+re_excl_video = re.compile(r'\b1080p\b', re.I)
+re_excl_anime = re.compile(r'\b1080p\b', re.I)
 SEARCH_FILTERS = {    # size ranges in MB, title inclusions and exclusions
     'anime': {'size_min': 100, 'size_max': 1000, 're_excl_raw': re_excl_anime},
     'apps': {},
