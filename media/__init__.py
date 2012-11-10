@@ -1,10 +1,10 @@
 import logging
 
-from mediaworker import settings
-
-from mediacore.util.db import connect
-
 from factory import Factory
+
+from mediacore.utils.db import connect
+
+from media import settings
 
 
 logging.basicConfig(level=logging.DEBUG)

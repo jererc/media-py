@@ -2,9 +2,11 @@ import re
 from datetime import timedelta
 
 
-PACKAGE_NAME = 'mediaworker'
+PACKAGE_NAME = 'media'
 
-DB_NAME = 'mediaworker'
+DB_NAME = 'media'
+
+WEBUI_PORT = 8000
 
 # Data
 PATH_MEDIA_ROOT = '/home/user'
@@ -15,7 +17,6 @@ PATHS_MEDIA_NEW = {
     None: '/home/user/misc/new',    # other media types
     }
 PATHS_FINISHED = {
-    'transmission': '/home/user/.transmission/finished', # must be different than the download dir
     'grab': '/home/user/finished',
     }
 PATH_INVALID_DOWNLOAD = '/home/user/misc/invalid'
@@ -72,16 +73,10 @@ SIMILAR_DELTA = {
 OPENSUBTITLES_USERNAME = ''
 OPENSUBTITLES_PASSWORD = ''
 
-# Transmission
-TRANSMISSION_HOST = 'localhost'
-TRANSMISSION_PORT = 9091
-TRANSMISSION_USERNAME = None
-TRANSMISSION_PASSWORD = None
-
 # Logging
 LOG_FORMAT = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
-LOG_DEFAULT = '/home/user/log/mediaworker.log'
-LOG_ERRORS = '/home/user/log/mediaworker-errors.log'
+LOG_DEFAULT = '/home/user/log/media.log'
+LOG_ERRORS = '/home/user/log/media-errors.log'
 LOG_SIZE = 100000   # Bytes
 LOG_COUNT = 100
 

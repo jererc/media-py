@@ -4,20 +4,23 @@ import logging
 
 from pymongo import DESCENDING
 
-from mediaworker import settings, get_factory
+from syncd import get_host
+
+from transfer import Transfer
 
 from systools.system import loop, timer
 
+from filetools.media import iter_files, get_size
+
 from mediacore.model.sync import Sync
 from mediacore.model.media import Media
-from mediacore.util.media import iter_files, get_size
 
-from syncd import get_host
+from media import settings, get_factory
 
 
 WORKERS_LIMIT = 4
-TIMEOUT_SYNC = 3600 * 6     # seconds
-DELTA_UPDATE = timedelta(hours=6)
+TIMEOUT_SYNC = 600     # seconds
+DELTA_UPDATE = timedelta(hours=4)
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +46,8 @@ def get_recent_media(category, genre=None, count_max=None, size_max=None):
                 {'extra.lastfm.genre': val},
                 ]
 
-    for media in Media().find(spec, sort=[('date', DESCENDING)]):
-        dirs_ = Media().get_bases(media['_id'], dirs_only=True)
+    for media in Media.find(spec, sort=[('date', DESCENDING)]):
+        dirs_ = Media.get_bases(media['_id'], dirs_only=True)
         if not dirs_:
             continue
 
@@ -63,41 +66,27 @@ def get_recent_media(category, genre=None, count_max=None, size_max=None):
     return dirs
 
 @timer()
-def _sync(host, src, dst):
-    if not isinstance(src, (tuple, list)):
-        src = [src]
-
-    for src_ in src:
-        started = datetime.utcnow()
-        try:
-            host.sftpsync(src_, dst, download=False, delete=True)
-            logger.info('synced %s with %s@%s:%s in %s', src_, host.username, host.host, dst, datetime.utcnow() - started)
-        except Exception, e:
-            logger.info('failed to sync %s with %s@%s:%s: %s', src_, host.username, host.host, dst, str(e))
-            return
-    return True
-
-@timer()
 def process_sync(sync_id):
-    sync = Sync().get(sync_id)
+    sync = Sync.get(sync_id)
     if not sync:
+        return
+    if Transfer.find_one({'sync_id': sync['_id'], 'finished': None}):
         return
     host = get_host(user=sync['user'])
     if not host:
         return
 
     if sync.get('media_id'):
-        src = Media().get_bases(sync['media_id'], dirs_only=True)
+        src = Media.get_bases(sync['media_id'], dirs_only=True)
         if not src:
             logger.info('failed to find path for media %s', sync['media_id'])
         else:
-            _sync(host, src, sync['dst'])
-        Sync().remove({'_id': sync['_id']}, safe=True)
+            dst = 'sftp://%s:%s@%s%s:%s' % (host.username, host.password, host.host, sync['dst'], host.port)
+            Transfer.add(src, dst, type='sftp', sync_id=sync['_id'])
+            logger.info('added transfer %s to %s' % (src, dst))
+        Sync.remove({'_id': sync['_id']}, safe=True)
 
     else:
-        sync['started'] = datetime.utcnow()
-        Sync().save(sync, safe=True)
-
         src = get_recent_media(**sync['parameters'])
 
         # Delete obsolete destination files
@@ -107,19 +96,21 @@ def process_sync(sync_id):
                 host.remove(dst)
                 logger.info('removed obsolete %s@%s:%s', host.username, host.host, dst)
 
-        if _sync(host, src, sync['dst']):
-            sync['media'] = src
-            sync['processed'] = datetime.utcnow()
-            Sync().save(sync, safe=True)
+        dst = 'sftp://%s:%s@%s%s:%s' % (host.username, host.password, host.host, sync['dst'], host.port)
+        transfer_id = Transfer.add(src, dst, type='sftp', sync_id=sync['_id'])
+        logger.info('added transfer %s to %s' % (src, dst))
+
+        sync['transfer_id'] = transfer_id
+        sync['media'] = src
+        sync['processed'] = datetime.utcnow()
+        Sync.save(sync, safe=True)
 
 @loop(60)
 def run():
-    for sync in Sync().find({
-            '$or': [
-                {'processed': {'$exists': False}},
-                {'processed': {'$lt': datetime.utcnow() - DELTA_UPDATE}},
-                ],
-            },
+    for sync in Sync.find({'$or': [
+            {'processed': {'$exists': False}},
+            {'processed': {'$lt': datetime.utcnow() - DELTA_UPDATE}},
+            ]},
             sort=[('media_id', DESCENDING)],
             limit=WORKERS_LIMIT):
         target = '%s.workers.sync.process_sync' % settings.PACKAGE_NAME

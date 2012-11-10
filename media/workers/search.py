@@ -4,16 +4,17 @@ from copy import copy
 
 from pymongo import ASCENDING
 
-from mediaworker import settings, get_factory
-
 from systools.system import loop, timer, dotdict
+
+from filetools.title import Title
 
 from mediacore.model.search import Search as MSearch
 from mediacore.model.media import Media
 from mediacore.model.result import Result
 from mediacore.web.search import results
 from mediacore.web.google import Google
-from mediacore.util.title import Title
+
+from media import settings, get_factory
 
 
 WORKERS_LIMIT = 5
@@ -78,13 +79,13 @@ class Search(dotdict):
             }
 
     def _get_query(self):
-        return MSearch().get_query(self)
+        return MSearch.get_query(self)
 
     def _add_next(self, mode):
         '''Create a search for next episode or season.
         '''
-        search = MSearch().get_next(self, mode=mode)
-        if search and MSearch().add(**search):
+        search = MSearch.get_next(self, mode=mode)
+        if search and MSearch.add(**search):
             logger.info('added search %s', search)
 
     def _is_finished(self):
@@ -94,15 +95,15 @@ class Search(dotdict):
         if date and date > datetime.utcnow() - DELTA_FILES_SEARCH:
             return
 
-        files = Media().search_files(**self)
+        files = Media.search_files(**self)
         if len(files) >= FILES_COUNT_MIN.get(self.category, 1):
             if self.mode == 'inc':
                 self._add_next('episode')
-            MSearch().remove({'_id': self._id}, safe=True)
+            MSearch.remove({'_id': self._id}, safe=True)
             logger.info('removed %s search "%s": found %s', self.category, self._get_query(), files)
             return True
 
-        MSearch().update({'_id': self._id},
+        MSearch.update({'_id': self._id},
                 {'$set': {'session.last_files_search': datetime.utcnow()}},
                 safe=True)
 
@@ -111,7 +112,7 @@ class Search(dotdict):
             return
         date = self.session['last_result'] or self.session['first_search']
         if date and date < datetime.utcnow() - DELTA_OBSOLETE:
-            MSearch().remove({'_id': self._id}, safe=True)
+            MSearch.remove({'_id': self._id}, safe=True)
             logger.info('removed search "%s" (no result for %d days)', self._get_query(), DELTA_OBSOLETE.days)
             return True
 
@@ -183,9 +184,9 @@ class Search(dotdict):
                 continue
 
             if result.get('hash'):
-                if Result().find_one({'hash': result.hash}):
+                if Result.find_one({'hash': result.hash}):
                     continue
-            elif Result().find_one({'url': result.url}):
+            elif Result.find_one({'url': result.url}):
                 continue
 
             self.session['nb_results'] += 1
@@ -197,7 +198,7 @@ class Search(dotdict):
                 self._add_next('episode')
 
             result['search_id'] = self._id
-            result_id = Result().insert(result, safe=True)
+            result_id = Result.insert(result, safe=True)
             self.results.insert(0, result_id)
             self.session['nb_downloads'] += 1
             logger.info('found "%s" on %s', result.title, result.plugin)
@@ -218,12 +219,12 @@ class Search(dotdict):
             self.session['last_search'] = now
             self.session['nb_processed'] += 1
 
-        MSearch().save(self, safe=True)
+        MSearch.save(self, safe=True)
 
 
 @timer(300)
 def process_search(search_id):
-    search = MSearch().get(search_id)
+    search = MSearch.get(search_id)
     if not search:
         return
     search = Search(search)
@@ -235,7 +236,7 @@ def run():
     if Google().accessible:
         count = 0
 
-        for search in MSearch().find(
+        for search in MSearch.find(
                 sort=[('session.last_search', ASCENDING)]):
             search = Search(search)
             if not search.validate():
@@ -249,5 +250,5 @@ def run():
             if count == WORKERS_LIMIT:
                 break
 
-    Result().remove({'created': {'$lt': datetime.utcnow() - DELTA_RESULTS_MAX}},
+    Result.remove({'created': {'$lt': datetime.utcnow() - DELTA_RESULTS_MAX}},
             safe=True)

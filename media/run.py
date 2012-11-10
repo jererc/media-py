@@ -2,9 +2,9 @@
 import logging
 from logging.handlers import RotatingFileHandler
 
-from mediaworker import settings, get_factory
-
 from systools.system import get_package_modules
+
+from media import settings, get_factory
 
 
 WORKERS_DIR = 'workers'
@@ -12,7 +12,7 @@ WORKERS_DIR = 'workers'
 
 def main():
     factory = get_factory()
-    factory.drop()
+    factory.remove(daemon=True)
 
     formatter = logging.Formatter(settings.LOG_FORMAT)
 

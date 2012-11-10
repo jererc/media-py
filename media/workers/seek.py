@@ -4,8 +4,6 @@ import logging
 
 from pymongo import ASCENDING
 
-from mediaworker import settings, get_factory
-
 from systools.system import loop, timer, dotdict
 
 from mediacore.model.release import Release
@@ -15,7 +13,9 @@ from mediacore.model.search import Search
 from mediacore.model.worker import Worker
 from mediacore.web.google import Google
 from mediacore.web.info import similar_movies, similar_tv, similar_music
-from mediacore.util.filter import validate_extra
+from mediacore.utils.filter import validate_extra
+
+from media import settings, get_factory
 
 
 NAME = os.path.splitext(os.path.basename(__file__))[0]
@@ -37,7 +37,7 @@ class SimilarMedia(dotdict):
 
     def _process_result(self, doc):
         doc['category'] = self.info.get('subtype')
-        if Similar().find_one(doc):
+        if Similar.find_one(doc):
             return
 
         if doc['category'] == 'tv':
@@ -48,10 +48,10 @@ class SimilarMedia(dotdict):
 
         if add_search(**doc):
             doc['created'] = datetime.utcnow()
-            Similar().insert(doc, safe=True)
+            Similar.insert(doc, safe=True)
 
             self.last_similar_search = datetime.utcnow()
-            Media().save(self, safe=True)
+            Media.save(self, safe=True)
             return True
 
     def _get_similar_movies(self):
@@ -87,7 +87,7 @@ class SimilarMedia(dotdict):
 
 
 def _media_exists(**kwargs):
-    files = Media().search_files(name=kwargs.get('name'),
+    files = Media.search_files(name=kwargs.get('name'),
             category=kwargs.get('category'),
             album=kwargs.get('album'))
 
@@ -98,24 +98,24 @@ def add_search(**search):
         return
 
     search['langs'] = SEARCH_LANGS.get(search['category'])
-    if Search().add(**search):
+    if Search.add(**search):
         logger.info('added search %s', search)
         return True
 
 @timer()
 def search_similar(category):
-    for media in Media().find({
+    for media in Media.find({
             'similar_search': True,
             'info.subtype': category,
             }, sort=[('last_similar_search', ASCENDING)]):
         if SimilarMedia(media).process():
             break
 
-    Worker().set_attr(NAME, 'similar_search_%s' % category, datetime.utcnow())
+    Worker.set_attr(NAME, 'similar_search_%s' % category, datetime.utcnow())
 
 def process_media():
     for category, delta in settings.SIMILAR_DELTA.items():
-        res = Worker().get_attr(NAME, 'similar_search_%s' % category)
+        res = Worker.get_attr(NAME, 'similar_search_%s' % category)
         if res and res > datetime.utcnow() - delta:
             continue
 
@@ -123,11 +123,11 @@ def process_media():
         get_factory().add(target=target,
                 args=(category,), timeout=TIMEOUT_SEEK)
 
-    Similar().remove({'created': {'$lt': datetime.utcnow() - DELTA_SIMILAR_MAX}},
+    Similar.remove({'created': {'$lt': datetime.utcnow() - DELTA_SIMILAR_MAX}},
             safe=True)
 
 def process_releases():
-    for release in Release().find({
+    for release in Release.find({
             'processed': False,
             'updated': {'$exists': True},
             }):
@@ -142,9 +142,9 @@ def process_releases():
                 continue
 
         if valid:
-            add_search(**Release().get_search(release))
+            add_search(**Release.get_search(release))
 
-        Release().update({'_id': release['_id']},
+        Release.update({'_id': release['_id']},
                 {'$set': {'processed': datetime.utcnow()}}, safe=True)
 
 @loop(minutes=5)

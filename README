@@ -1,4 +1,4 @@
-The media project worker.
+Media.
 
 
 Features:
@@ -6,12 +6,12 @@ Features:
 - fetch new releases (scene releases, tv schedule, music reviews)
 - grab new media matching filters (rating, genre, date...)
 - grab similar media (directors movies, similar bands albums)
-- grab movies subtitles
+- grab movies and tv shows subtitles
 - unpack, clean and sort new media into the media type based directories
 - fetch media metadata (director, release date, etc)
-- retrieve media trailers and audio tracks urls
+- retrieve media trailers and audio tracks
 - sync media to network hosts (e.g.: phones)
 
 
 Start the worker:
-./mediaworker/run.py
+./media/run.py

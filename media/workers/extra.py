@@ -3,12 +3,12 @@ import logging
 
 from pymongo import DESCENDING
 
-from mediaworker import settings, get_factory
-
 from systools.system import loop, timer
 
 from mediacore.web.google import Google
 from mediacore.web.info import search_extra
+
+from media import settings, get_factory
 
 
 WORKERS_LIMIT = 10

@@ -2,9 +2,9 @@ import os.path
 from datetime import datetime, timedelta
 import logging
 
-from mediaworker import settings, get_factory
-
 from systools.system import loop, timer
+
+from filetools.title import clean
 
 from mediacore.model.release import Release
 from mediacore.model.worker import Worker
@@ -12,7 +12,8 @@ from mediacore.web.google import Google
 from mediacore.web.vcdquality import Vcdquality
 from mediacore.web.tvrage import Tvrage
 from mediacore.web.sputnikmusic import Sputnikmusic
-from mediacore.util.title import clean
+
+from media import settings, get_factory
 
 
 NAME = os.path.splitext(os.path.basename(__file__))[0]
@@ -31,12 +32,12 @@ def _import_vcdquality():
             continue
 
         name = clean(res['release'], 7)
-        if not Release().find_one({
+        if not Release.find_one({
                 'name': name,
                 'type': 'video',
                 'info.subtype': 'movies',
                 }):
-            Release().insert({
+            Release.insert({
                     'name': name,
                     'type': 'video',
                     'info': {'subtype': 'movies'},
@@ -55,12 +56,12 @@ def _import_tvrage():
             continue
 
         name = clean(res['name'], 7)
-        if not Release().find_one({
+        if not Release.find_one({
                 'name': name,
                 'type': 'video',
                 'info.subtype': 'tv',
                 }):
-            Release().insert({
+            Release.insert({
                     'name': name,
                     'type': 'video',
                     'info': {'subtype': 'tv'},
@@ -79,13 +80,13 @@ def _import_sputnikmusic():
             continue
 
         name = '%s - %s' % (res['artist'], res['album'])
-        if not Release().find_one({
+        if not Release.find_one({
                 'artist': res['artist'],
                 'album': res['album'],
                 'type': 'audio',
                 'info.subtype': 'music',
                 }):
-            Release().insert({
+            Release.insert({
                     'name': name,
                     'artist': res['artist'],
                     'album': res['album'],
@@ -99,10 +100,10 @@ def _import_sputnikmusic():
 
 @timer()
 def import_releases(type):
-    res = Worker().get_attr(NAME, type)
+    res = Worker.get_attr(NAME, type)
     if not res or res < datetime.utcnow() - DELTA_IMPORT:
         globals().get('_import_%s' % type)()
-        Worker().set_attr(NAME, type, datetime.utcnow())
+        Worker.set_attr(NAME, type, datetime.utcnow())
 
 @loop(minutes=5)
 def run():
@@ -113,5 +114,5 @@ def run():
             target = '%s.workers.release.import_releases' % settings.PACKAGE_NAME
             factory.add(target=target, args=(type,), timeout=TIMEOUT_IMPORT)
 
-        Release().remove({'date': {'$lt': datetime.utcnow() - DELTA_RELEASE}},
+        Release.remove({'date': {'$lt': datetime.utcnow() - DELTA_RELEASE}},
                 safe=True)
