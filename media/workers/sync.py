@@ -20,7 +20,8 @@ from media import settings, get_factory
 
 WORKERS_LIMIT = 4
 TIMEOUT_SYNC = 600     # seconds
-DELTA_UPDATE = timedelta(hours=4)
+DELTA_NEXT = timedelta(hours=4)
+DELTA_RETRY = timedelta(minutes=30)
 
 logger = logging.getLogger(__name__)
 
@@ -65,15 +66,21 @@ def get_recent_media(category, genre=None, count_max=None, size_max=None):
 
     return dirs
 
+def set_retry(sync):
+    sync['reserved'] = datetime.utcnow() + DELTA_RETRY
+    Sync.save(sync, safe=True)
+
 @timer()
 def process_sync(sync_id):
     sync = Sync.get(sync_id)
     if not sync:
         return
     if Transfer.find_one({'sync_id': sync['_id'], 'finished': None}):
+        set_retry(sync)
         return
     host = get_host(user=sync['user'])
     if not host:
+        set_retry(sync)
         return
 
     if sync.get('media_id'):
@@ -103,13 +110,14 @@ def process_sync(sync_id):
         sync['transfer_id'] = transfer_id
         sync['media'] = src
         sync['processed'] = datetime.utcnow()
+        sync['reserved'] = datetime.utcnow() + DELTA_NEXT
         Sync.save(sync, safe=True)
 
 @loop(60)
 def run():
     for sync in Sync.find({'$or': [
-            {'processed': {'$exists': False}},
-            {'processed': {'$lt': datetime.utcnow() - DELTA_UPDATE}},
+            {'reserved': {'$exists': False}},
+            {'reserved': {'$lt': datetime.utcnow()}},
             ]},
             sort=[('media_id', DESCENDING)],
             limit=WORKERS_LIMIT):
