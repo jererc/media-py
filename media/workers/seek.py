@@ -60,7 +60,7 @@ class SimilarMedia(dotdict):
             if self._process_result({'name': movie}):
                 return True
 
-        logger.info('failed to find similar movies from "%s"', self.name)
+        logger.info('failed to find similar movies from "%s"' % self.name)
 
     def _get_similar_tv(self):
         for tv in similar_tv(self.info.get('name'),
@@ -68,7 +68,7 @@ class SimilarMedia(dotdict):
             if self._process_result({'name': tv}):
                 return True
 
-        logger.info('failed to find similar tv from "%s"', self.info.get('name'))
+        logger.info('failed to find similar tv from "%s"' % self.info.get('name'))
 
     def _get_similar_music(self):
         for artist, album in similar_music(self.info.get('artist'),
@@ -76,13 +76,11 @@ class SimilarMedia(dotdict):
             if self._process_result({'name': artist, 'album': album}):
                 return True
 
-        logger.info('failed to find similar music from "%s"', self.info.get('artist'))
+        logger.info('failed to find similar music from "%s"' % self.info.get('artist'))
 
     def process(self):
         category = self.info.get('subtype')
-
-        logger.info('searching similar %s for "%s"', category, self.name)
-
+        logger.info('searching similar %s for "%s"' % (category, self.name))
         return getattr(self, '_get_similar_%s' % category)()
 
 
@@ -99,7 +97,7 @@ def add_search(**search):
 
     search['langs'] = SEARCH_LANGS.get(search['category'])
     if Search.add(**search):
-        logger.info('added search %s', search)
+        logger.info('added search %s' % search)
         return True
 
 @timer()
@@ -143,7 +141,6 @@ def process_releases():
 
         if valid:
             add_search(**Release.get_search(release))
-
         Release.update({'_id': release['_id']},
                 {'$set': {'processed': datetime.utcnow()}}, safe=True)
 

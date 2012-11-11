@@ -28,9 +28,9 @@ logger = logging.getLogger(__name__)
 def get_model(objtype):
     try:
         module = __import__('mediacore.model.%s' % objtype, globals(), locals(), [objtype], -1)
-        return getattr(module, objtype.capitalize(), None)
-    except ImportError, e:
-        logger.error('failed to import model %s: %s', objtype, str(e))
+        return getattr(module, objtype.capitalize())
+    except (AttributeError, ImportError), e:
+        logger.error('failed to import model %s: %s' % (objtype, str(e)))
 
 def validate_object(created, updated):
     if not updated:
@@ -45,7 +45,9 @@ def validate_object(created, updated):
 @timer(30)
 def update_obj_extra(objtype, objid):
     model = get_model(objtype)
-    obj = model().find_one({'_id': objid})
+    if not model:
+        return
+    obj = model.find_one({'_id': objid})
     if not obj:
         return
     # Check dates in case the object has been updated by another worker
@@ -65,9 +67,9 @@ def update_obj_extra(objtype, objid):
             else:
                 spec = {'name': obj['name']}
 
-    model().update(spec, {'$set': doc}, multi=True, safe=True)
+    model.update(spec, {'$set': doc}, multi=True, safe=True)
 
-    name = model().get_query(obj) if objtype == 'search' else obj['name']
+    name = model.get_query(obj) if objtype == 'search' else obj['name']
     logger.info('updated %s %s "%s"', category, objtype, name)
 
 def update_extra(objtype):
@@ -75,7 +77,9 @@ def update_extra(objtype):
 
     sort = [('date', DESCENDING)] if objtype == 'release' else [('created', DESCENDING)]
     model = get_model(objtype)
-    for obj in model().find({
+    if not model:
+        return
+    for obj in model.find({
             '$or': [
                 {'updated': {'$exists': False}},
                 {'updated': {'$lt': datetime.utcnow() - DELTA_UPDATE_DEF[-1][1]}},
