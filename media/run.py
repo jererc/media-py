@@ -1,16 +1,31 @@
 #!/usr/bin/env python
+import sys
 import logging
 from logging.handlers import RotatingFileHandler
 
-from systools.system import get_package_modules
+from systools.system import popen, get_package_modules
 
 from media import settings, get_factory
 
 
 WORKERS_DIR = 'workers'
+CMDS = ['mongod', 'transmission-daemon', 'mediainfo',
+    'unzip', 'unrar', 'xvfb-run']
 
+
+def check_requirements():
+    res = True
+    for cmd in CMDS:
+        if popen('which %s' % cmd)[-1] != 0:
+            res = False
+            print '%s is missing' % cmd
+
+    return res
 
 def main():
+    if not check_requirements():
+        sys.exit(1)
+
     factory = get_factory()
     factory.remove(daemon=True)
 

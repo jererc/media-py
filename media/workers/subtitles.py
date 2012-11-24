@@ -64,7 +64,7 @@ def search_subtitles(media_id):
 
     info = media['info']
     subtitles_langs = []
-    success = True
+    processed = False
     plugins = get_plugins()
 
     for file in media['files']:
@@ -88,11 +88,10 @@ def search_subtitles(media_id):
         for lang in settings.SUBTITLES_SEARCH_LANGS:
             for obj_name, obj in plugins.items():
                 if not obj.accessible:
-                    success = False
                     continue
                 if obj_name == 'opensubtitles' and not validate_quota():
-                    success = False
                     continue
+                processed = True
                 lang_ = LANGS_DEF[obj_name].get(lang)
                 if not lang_:
                     continue
@@ -124,7 +123,7 @@ def search_subtitles(media_id):
             if file_.set_subtitles(lang):
                 subtitles_langs.append(lang)
 
-    if success:
+    if processed:
         media['subtitles_search'] = datetime.utcnow()
     media['subtitles'] = sorted(list(set(subtitles_langs)))
     Media.save(media, safe=True)

@@ -4,7 +4,7 @@ import logging
 
 from pymongo import DESCENDING
 
-from syncd import get_host
+from mist import get_host
 
 from transfer import Transfer
 
