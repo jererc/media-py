@@ -13,5 +13,5 @@ Features:
 - sync media to devices (laptop, phone)
 
 
-Start the worker:
+Start the daemon and webui:
 ./media/run.py
