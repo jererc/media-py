@@ -20,12 +20,17 @@ from media import settings, get_factory
 
 
 NAME = os.path.splitext(os.path.basename(__file__))[0]
-WORKERS_LIMIT = 10
-TIMEOUT_SEARCH = 1200   # seconds
-DELTA_SEARCH = timedelta(hours=12)
-PATH_ROOT = settings.PATHS_MEDIA_NEW['video'].rstrip('/') + '/'
-VIDEO_SIZE_MIN = 100    # MB
+WORKERS_LIMIT = 4
+DELTA_UPDATE_DEF = [    # delta created, delta updated
+    (timedelta(days=365), timedelta(days=30)),
+    (timedelta(days=90), timedelta(days=15)),
+    (timedelta(days=30), timedelta(days=7)),
+    (timedelta(days=10), timedelta(days=2)),
+    (timedelta(days=3), timedelta(hours=6)),
+    ]
 DELTA_OPENSUBTITLES_QUOTA = timedelta(hours=12)
+TIMEOUT_SEARCH = 1200   # seconds
+VIDEO_SIZE_MIN = 100    # MB
 LANGS_DEF = {
     'opensubtitles': {
         'en': 'eng',
@@ -40,21 +45,31 @@ LANGS_DEF = {
 logger = logging.getLogger(__name__)
 
 
+def validate_media(media):
+    if not media['info'].get('name'):
+        return
+    if not media.get('updated_subs'):
+        return True
+    now = datetime.utcnow()
+    delta_created = now - media['created']
+    delta_updated = now - media['updated_subs']
+    for d_created, d_updated in DELTA_UPDATE_DEF:
+        if delta_created > d_created and delta_updated > d_updated:
+            return True
+
+def validate_file(file):
+    if not os.path.exists(file):
+        return
+    if get_size(file) / 1024 < VIDEO_SIZE_MIN:
+        return
+    return True
+
 def get_plugins():
     return {
         'subscene': Subscene(),
         'opensubtitles': Opensubtitles(settings.OPENSUBTITLES_USERNAME,
                     settings.OPENSUBTITLES_PASSWORD),
         }
-
-def validate_file(file):
-    if not file.startswith(PATH_ROOT):
-        return
-    if not os.path.exists(file):
-        return
-    if get_size(file) / 1024 < VIDEO_SIZE_MIN:
-        return
-    return True
 
 @timer(300)
 def search_subtitles(media_id):
@@ -63,29 +78,32 @@ def search_subtitles(media_id):
         return
 
     info = media['info']
+    if info['subtype'] == 'tv':
+        name = clean(info.get('name'), 6)
+        season = info.get('season')
+        episode = info.get('episode')
+        date = None
+    else:
+        name = info.get('full_name')
+        season = None
+        episode = None
+        date = media.get('extra', {}).get('imdb', {}).get('date')
+
     subtitles_langs = []
-    processed = False
     plugins = get_plugins()
 
+    stat = []
     for file in media['files']:
         if not validate_file(file):
             continue
 
-        if info['subtype'] == 'tv':
-            name = clean(info.get('name'), 6)
-            season = info.get('season')
-            episode = info.get('episode')
-            date = None
-        else:
-            name = info.get('full_name')
-            season = None
-            episode = None
-            date = media.get('extra', {}).get('imdb', {}).get('date')
-
         file_ = get_file(file)
         dst = file_.get_subtitles_path()
 
+        processed = False
         for lang in settings.SUBTITLES_SEARCH_LANGS:
+            logger.debug('searching %s subtitles for "%s" (%s)' % (lang, media['name'], file))
+
             for obj_name, obj in plugins.items():
                 if not obj.accessible:
                     continue
@@ -95,8 +113,6 @@ def search_subtitles(media_id):
                 lang_ = LANGS_DEF[obj_name].get(lang)
                 if not lang_:
                     continue
-
-                logger.debug('searching subtitles for "%s" (%s) on %s' % (media['name'], file, obj_name))
 
                 for res in obj.results(name, season, episode, date, lang_):
                     doc = {
@@ -123,8 +139,10 @@ def search_subtitles(media_id):
             if file_.set_subtitles(lang):
                 subtitles_langs.append(lang)
 
-    if processed:
-        media['subtitles_search'] = datetime.utcnow()
+        stat.append(processed)
+
+    if False not in stat:
+        media['updated_subs'] = datetime.utcnow()
     media['subtitles'] = sorted(list(set(subtitles_langs)))
     Media.save(media, safe=True)
 
@@ -134,19 +152,21 @@ def process_media():
     for media in Media.find({
             'type': 'video',
             '$or': [
-                {'subtitles_search': {'$exists': False}},
-                {'subtitles_search': {'$lt': datetime.utcnow() - DELTA_SEARCH}},
+                {'updated_subs': {'$exists': False}},
+                {'updated_subs': {'$lt': datetime.utcnow() - DELTA_UPDATE_DEF[-1][1]}},
                 ],
             },
-            sort=[('subtitles_search', ASCENDING)]):
-        if [f for f in media['files'] if f.startswith(PATH_ROOT)]:
-            target = '%s.workers.subtitles.search_subtitles' % settings.PACKAGE_NAME
-            get_factory().add(target=target,
-                    args=(media['_id'],), timeout=TIMEOUT_SEARCH)
+            sort=[('updated_subs', ASCENDING)]):
+        if not validate_media(media):
+            continue
 
-            count += 1
-            if count == WORKERS_LIMIT:
-                return
+        target = '%s.workers.subtitles.search_subtitles' % settings.PACKAGE_NAME
+        get_factory().add(target=target,
+                args=(media['_id'],), timeout=TIMEOUT_SEARCH)
+
+        count += 1
+        if count == WORKERS_LIMIT:
+            return
 
 def validate_quota():
     res = Worker.get_attr(NAME, 'opensubtitles_quota_reached')
@@ -160,7 +180,7 @@ def update_quota():
 
 @loop(minutes=2)
 def run():
-    if Google().accessible:
+    if settings.SUBTITLES_SEARCH_LANGS and Google().accessible:
         process_media()
 
     for res in Subtitles.find():

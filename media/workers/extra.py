@@ -35,9 +35,9 @@ def get_model(objtype):
 def validate_object(created, updated):
     if not updated:
         return True
-
-    delta_created = datetime.utcnow() - created
-    delta_updated = datetime.utcnow() - updated
+    now = datetime.utcnow()
+    delta_created = now - created
+    delta_updated = now - updated
     for d_created, d_updated in DELTA_UPDATE_DEF:
         if delta_created > d_created and delta_updated > d_updated:
             return True
