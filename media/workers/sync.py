@@ -20,7 +20,6 @@ from media import settings, get_factory
 
 WORKERS_LIMIT = 4
 TIMEOUT_SYNC = 600     # seconds
-DELTA_NEXT = timedelta(hours=4)
 DELTA_RETRY = timedelta(minutes=30)
 
 logger = logging.getLogger(__name__)
@@ -110,7 +109,7 @@ def process_sync(sync_id):
         sync['transfer_id'] = transfer_id
         sync['media'] = src
         sync['processed'] = datetime.utcnow()
-        sync['reserved'] = datetime.utcnow() + DELTA_NEXT
+        sync['reserved'] = datetime.utcnow() + settings.DELTA_SYNC
         Sync.save(sync, safe=True)
 
 @loop(60)

@@ -5,6 +5,8 @@ from logging.handlers import RotatingFileHandler
 
 from systools.system import popen, get_package_modules
 
+from tracy import DbHandler
+
 from media import settings, get_factory
 
 
@@ -29,20 +31,12 @@ def main():
     factory = get_factory()
     factory.remove(daemon=True)
 
-    formatter = logging.Formatter(settings.LOG_FORMAT)
-
-    # Standard file logging
-    fh = RotatingFileHandler(settings.LOG_DEFAULT, 'a', settings.LOG_SIZE,
-            settings.LOG_COUNT)
-    fh.setFormatter(formatter)
-
-    # Errors file logging
-    eh = RotatingFileHandler(settings.LOG_ERRORS, 'a', settings.LOG_SIZE,
-            settings.LOG_COUNT)
-    eh.setFormatter(formatter)
-    eh.setLevel(logging.ERROR)
-
-    factory.logging_handlers = (fh, eh)
+    # Logging handlers
+    fh = RotatingFileHandler(settings.LOG_FILE, 'a',
+            settings.LOG_SIZE, settings.LOG_COUNT)
+    fh.setFormatter(logging.Formatter(settings.LOG_FORMAT))
+    dh = DbHandler(logging.ERROR)
+    factory.logging_handlers = (fh, dh)
 
     for module in get_package_modules(WORKERS_DIR):
         if module != '__init__':

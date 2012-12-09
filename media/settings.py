@@ -69,14 +69,16 @@ SIMILAR_DELTA = {
     'music': timedelta(days=2),
     }
 
+# Syncs
+DELTA_SYNC = timedelta(hours=4)
+
 # Credentials
 OPENSUBTITLES_USERNAME = ''
 OPENSUBTITLES_PASSWORD = ''
 
 # Logging
+LOG_FILE = '/home/user/log/media.log'
 LOG_FORMAT = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
-LOG_DEFAULT = '/home/user/log/media.log'
-LOG_ERRORS = '/home/user/log/media-errors.log'
 LOG_SIZE = 100000   # Bytes
 LOG_COUNT = 100
 
@@ -92,8 +94,7 @@ except ImportError:
 import os
 
 paths = [PATH_MEDIA_ROOT] + PATHS_MEDIA_NEW.values() \
-    + PATHS_FINISHED.values() \
-    + [os.path.dirname(LOG_DEFAULT), os.path.dirname(LOG_ERRORS), PATH_TMP]
+    + PATHS_FINISHED.values() + [os.path.dirname(LOG_FILE), PATH_TMP]
 for path in set(paths):
     if not os.path.exists(path):
         try:

@@ -20,6 +20,7 @@ from media import settings, get_factory
 
 
 NAME = os.path.splitext(os.path.basename(__file__))[0]
+PATH_ROOT = settings.PATHS_MEDIA_NEW['video'].rstrip('/') + '/'
 WORKERS_LIMIT = 4
 DELTA_UPDATE_DEF = [    # delta created, delta updated
     (timedelta(days=365), timedelta(days=30)),
@@ -58,6 +59,8 @@ def validate_media(media):
             return True
 
 def validate_file(file):
+    if not file.startswith(PATH_ROOT):
+        return
     if not os.path.exists(file):
         return
     if get_size(file) / 1024 < VIDEO_SIZE_MIN:
@@ -157,6 +160,8 @@ def process_media():
                 ],
             },
             sort=[('updated_subs', ASCENDING)]):
+        if not [f for f in media['files'] if f.startswith(PATH_ROOT)]:
+            continue
         if not validate_media(media):
             continue
 
