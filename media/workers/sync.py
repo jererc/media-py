@@ -4,7 +4,7 @@ import logging
 
 from pymongo import DESCENDING
 
-from mist import get_host
+from mist import get_user, get_host
 
 from transfer import Transfer
 
@@ -77,32 +77,50 @@ def process_sync(sync_id):
     if Transfer.find_one({'sync_id': sync['_id'], 'finished': None}):
         set_retry(sync)
         return
+    user = get_user(sync['user'])
+    if not user:
+        Sync.remove({'_id': sync['_id']}, safe=True)
+        logger.info('failed to find user %s' % sync['user'])
+        return
+    path_root = user.get('paths', {}).get(sync['category'])
+    if not path_root:
+        Sync.remove({'_id': sync['_id']}, safe=True)
+        logger.info('failed to find %s path for user %s' % (sync['category'], sync['user']))
+        return
+    dst_path = os.path.join(path_root, sync['dst'].strip('/')).rstrip('/') + '/'
+
     host = get_host(user=sync['user'])
     if not host:
         set_retry(sync)
         return
 
-    if sync.get('media_id'):
-        src = Media.get_bases(sync['media_id'], dirs_only=True)
+    media_id = sync['parameters'].get('id')
+    if media_id:
+        src = Media.get_bases(media_id, dirs_only=True)
         if not src:
-            logger.info('failed to find path for media %s', sync['media_id'])
+            logger.info('failed to find path for media %s' % media_id)
         else:
-            dst = 'sftp://%s:%s@%s%s:%s' % (host.username, host.password, host.host, sync['dst'], host.port)
+            dst = 'sftp://%s:%s@%s%s:%s' % (host.username, host.password, host.host, dst_path, host.port)
             Transfer.add(src, dst, type='sftp', sync_id=sync['_id'])
             logger.info('added transfer %s to %s' % (src, dst))
         Sync.remove({'_id': sync['_id']}, safe=True)
 
     else:
-        src = get_recent_media(**sync['parameters'])
+        src = get_recent_media(sync['category'], **sync['parameters'])
 
+        src_dirs = dict([(os.path.basename(s), s) for s in src])
+        # Check duplicates at user path
+        for dir_ in host.listdir(path_root):
+            src_dir = src_dirs.pop(os.path.basename(dir_), None)
+            if src_dir:
+                src.remove(src_dir)
         # Delete obsolete destination files
-        basenames = [os.path.basename(s) for s in src]
-        for dst in host.listdir(sync['dst']):
-            if os.path.basename(dst) not in basenames:
-                host.remove(dst)
-                logger.info('removed obsolete %s@%s:%s', host.username, host.host, dst)
+        for dir_ in host.listdir(dst_path):
+            if os.path.basename(dir_) not in src_dirs:
+                host.remove(dir_)
+                logger.info('removed obsolete %s@%s:%s' % (host.username, host.host, dir_))
 
-        dst = 'sftp://%s:%s@%s%s:%s' % (host.username, host.password, host.host, sync['dst'], host.port)
+        dst = 'sftp://%s:%s@%s%s:%s' % (host.username, host.password, host.host, dst_path, host.port)
         transfer_id = Transfer.add(src, dst, type='sftp', sync_id=sync['_id'])
         logger.info('added transfer %s to %s' % (src, dst))
 
@@ -118,7 +136,7 @@ def run():
             {'reserved': {'$exists': False}},
             {'reserved': {'$lt': datetime.utcnow()}},
             ]},
-            sort=[('media_id', DESCENDING)],
+            sort=[('parameters.id', DESCENDING)],
             limit=WORKERS_LIMIT):
         target = '%s.workers.sync.process_sync' % settings.PACKAGE_NAME
         get_factory().add(target=target,

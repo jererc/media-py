@@ -20,9 +20,9 @@ from media import settings, get_factory
 WORKERS_LIMIT = 5
 TIMEOUT_SEARCH = 1800    # seconds
 DELTA_SEARCH = {
-    'once': timedelta(hours=6),
+    'once': timedelta(hours=24),
     'inc': timedelta(hours=6),
-    'ever': timedelta(hours=12),
+    'ever': timedelta(hours=24),
     }
 DELTA_FILES_SEARCH = timedelta(hours=1)
 DELTA_RESULT = {
