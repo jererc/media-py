@@ -101,7 +101,7 @@ def process_sync(sync_id):
             logger.info('failed to find path for media %s' % media_id)
         else:
             dst = 'sftp://%s:%s@%s%s:%s' % (host.username, host.password, host.host, dst_path, host.port)
-            Transfer.add(src, dst, type='sftp', sync_id=sync['_id'])
+            Transfer.add(src, dst, sync_id=sync['_id'])
             logger.info('added transfer %s to %s' % (src, dst))
         Sync.remove({'_id': sync['_id']}, safe=True)
 
@@ -111,7 +111,7 @@ def process_sync(sync_id):
         src_dirs = dict([(os.path.basename(s), s) for s in src])
         # Check duplicates at user path
         for dir_ in host.listdir(path_root):
-            src_dir = src_dirs.pop(os.path.basename(dir_), None)
+            src_dir = src_dirs.get(os.path.basename(dir_))
             if src_dir:
                 src.remove(src_dir)
         # Delete obsolete destination files
@@ -121,7 +121,7 @@ def process_sync(sync_id):
                 logger.info('removed obsolete %s@%s:%s' % (host.username, host.host, dir_))
 
         dst = 'sftp://%s:%s@%s%s:%s' % (host.username, host.password, host.host, dst_path, host.port)
-        transfer_id = Transfer.add(src, dst, type='sftp', sync_id=sync['_id'])
+        transfer_id = Transfer.add(src, dst, sync_id=sync['_id'])
         logger.info('added transfer %s to %s' % (src, dst))
 
         sync['transfer_id'] = transfer_id
