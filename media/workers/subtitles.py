@@ -175,8 +175,12 @@ def process_media():
 
 def validate_quota():
     res = Worker.get_attr(NAME, 'opensubtitles_quota_reached')
-    if not res or res < datetime.utcnow() - DELTA_OPENSUBTITLES_QUOTA:
+    if not res:
         return True
+    if res + DELTA_OPENSUBTITLES_QUOTA < datetime.utcnow():
+        res = Worker.set_attr(NAME, 'opensubtitles_quota_reached', None)
+        return True
+    return False
 
 def update_quota():
     if not Worker.get_attr(NAME, 'opensubtitles_quota_reached'):
