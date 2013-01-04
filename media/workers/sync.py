@@ -111,7 +111,7 @@ def process_sync(sync_id):
         src_dirs = dict([(os.path.basename(s), s) for s in src])
         # Check duplicates at user path
         for dir_ in host.listdir(path_root):
-            src_dir = src_dirs.get(os.path.basename(dir_))
+            src_dir = src_dirs.pop(os.path.basename(dir_), None)
             if src_dir:
                 src.remove(src_dir)
         # Delete obsolete destination files
