@@ -225,30 +225,32 @@ class Search(dotdict):
 @timer(300)
 def process_search(search_id):
     search = MSearch.get(search_id)
-    if not search:
-        return
-    search = Search(search)
-    search.process()
-    search.save()
+    if search:
+        search = Search(search)
+        search.process()
+        search.save()
+
+def process_searches():
+    count = 0
+
+    for search in MSearch.find(
+            sort=[('session.last_search', ASCENDING)]):
+        search = Search(search)
+        if not search.validate():
+            continue
+
+        target = '%s.workers.search.process_search' % settings.PACKAGE_NAME
+        get_factory().add(target=target,
+                args=(search._id,), timeout=TIMEOUT_SEARCH)
+
+        count += 1
+        if count == WORKERS_LIMIT:
+            break
 
 @loop(60)
 def run():
     if Google().accessible:
-        count = 0
-
-        for search in MSearch.find(
-                sort=[('session.last_search', ASCENDING)]):
-            search = Search(search)
-            if not search.validate():
-                continue
-
-            target = '%s.workers.search.process_search' % settings.PACKAGE_NAME
-            get_factory().add(target=target,
-                    args=(search._id,), timeout=TIMEOUT_SEARCH)
-
-            count += 1
-            if count == WORKERS_LIMIT:
-                break
+        process_searches()
 
     Result.remove({'created': {'$lt': datetime.utcnow() - DELTA_RESULTS_MAX}},
             safe=True)

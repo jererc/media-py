@@ -8,6 +8,7 @@ from filetools.download import downloads, check_download
 from filetools.media import remove_file, move_file
 
 from mediacore.model.download import Download
+from mediacore.model.notification import Notification
 from mediacore.model.media import Media
 
 from media.settings import PATHS_FINISHED, PATHS_MEDIA_NEW
@@ -42,4 +43,5 @@ def run():
                         'path': PATHS_MEDIA_NEW[download.type],
                         'created': datetime.utcnow(),
                         }, safe=True)
-                logger.info('moved %s to %s', download.filename, PATHS_MEDIA_NEW[download.type])
+                Notification.add('new media "%s"' % download.filename)
+                logger.info('moved %s to %s' % (download.filename, PATHS_MEDIA_NEW[download.type]))
