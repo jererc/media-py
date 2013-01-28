@@ -46,7 +46,7 @@ def _import_vcdquality():
                     'created': datetime.utcnow(),
                     'processed': False,
                     }, safe=True)
-            logger.info('added movies release "%s"', name)
+            logger.info('added movies release "%s"' % name)
 
 def _import_tvrage():
     for res in Tvrage().scheduled_shows():
@@ -70,7 +70,7 @@ def _import_tvrage():
                     'created': datetime.utcnow(),
                     'processed': False,
                     }, safe=True)
-            logger.info('added tv release "%s"', name)
+            logger.info('added tv release "%s"' % name)
 
 def _import_sputnikmusic():
     for res in Sputnikmusic().reviews():
@@ -96,7 +96,7 @@ def _import_sputnikmusic():
                     'created': datetime.utcnow(),
                     'processed': False,
                     }, safe=True)
-            logger.info('added music release "%s"', name)
+            logger.info('added music release "%s"' % name)
 
 @timer()
 def import_releases(type):

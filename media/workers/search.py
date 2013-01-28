@@ -86,7 +86,7 @@ class Search(dotdict):
         '''
         search = MSearch.get_next(self, mode=mode)
         if search and MSearch.add(**search):
-            logger.info('added search %s', search)
+            logger.info('added search %s' % search)
 
     def _is_finished(self):
         if self.mode == 'ever':
@@ -100,7 +100,7 @@ class Search(dotdict):
             if self.mode == 'inc':
                 self._add_next('episode')
             MSearch.remove({'_id': self._id}, safe=True)
-            logger.info('removed %s search "%s": found %s', self.category, self._get_query(), files)
+            logger.info('removed %s search "%s": found %s' % (self.category, self._get_query(), files))
             return True
 
         MSearch.update({'_id': self._id},
@@ -113,7 +113,7 @@ class Search(dotdict):
         date = self.session['last_result'] or self.session['first_search']
         if date and date < datetime.utcnow() - DELTA_OBSOLETE:
             MSearch.remove({'_id': self._id}, safe=True)
-            logger.info('removed search "%s" (no result for %d days)', self._get_query(), DELTA_OBSOLETE.days)
+            logger.info('removed search "%s" (no result for %d days)' % (self._get_query(), DELTA_OBSOLETE.days))
             return True
 
     def _validate_dates(self):
@@ -159,12 +159,12 @@ class Search(dotdict):
         '''
         date = result.get('date')
         if date and date > datetime.utcnow() - DELTA_RESULT[self.mode]:
-            logger.info('filtered "%s" (%s): too recent (%s)', result.title, result.plugin, date)
+            logger.info('filtered "%s" (%s): too recent (%s)' % (result.title, result.plugin, date))
             return False
 
         seeds = result.get('seeds')
         if seeds is not None and seeds < NB_SEEDS_MIN[self.mode]:
-            logger.info('filtered "%s" (%s): not enough seeds (%s)', result.title, result.plugin, seeds)
+            logger.info('filtered "%s" (%s): not enough seeds (%s)' % (result.title, result.plugin, seeds))
             return False
 
         return True
@@ -172,7 +172,7 @@ class Search(dotdict):
     def process(self):
         query = self._get_query()
 
-        logger.info('processing %s search "%s"', self.category, query)
+        logger.info('processing %s search "%s"' % (self.category, query))
 
         for result in results(query,
                 category=self.category,
@@ -201,7 +201,7 @@ class Search(dotdict):
             result_id = Result.insert(result, safe=True)
             self.results.insert(0, result_id)
             self.session['nb_downloads'] += 1
-            logger.info('found "%s" on %s', result.title, result.plugin)
+            logger.info('found "%s" on %s' % (result.title, result.plugin))
 
             if self.mode != 'ever':
                 break

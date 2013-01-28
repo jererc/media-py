@@ -70,7 +70,7 @@ def update_obj_extra(objtype, objid):
     model.update(spec, {'$set': doc}, multi=True, safe=True)
 
     name = model.get_query(obj) if objtype == 'search' else obj['name']
-    logger.info('updated %s %s "%s"', category, objtype, name)
+    logger.info('updated %s %s "%s"' % (category, objtype, name))
 
 def update_extra(objtype):
     count = 0
