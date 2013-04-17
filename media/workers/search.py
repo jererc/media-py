@@ -11,6 +11,7 @@ from filetools.title import Title
 from mediacore.model.search import Search as MSearch
 from mediacore.model.media import Media
 from mediacore.model.result import Result
+from mediacore.model.settings import Settings
 from mediacore.web.search import results
 from mediacore.web.google import Google
 
@@ -42,12 +43,12 @@ NB_SEEDS_MIN = {
     'inc': 10,
     'ever': 1,
     }
-FILES_COUNT_MIN = {'music': 3}
 
 logger = logging.getLogger(__name__)
 
 
 class Search(dotdict):
+
     def __init__(self, doc):
         super(Search, self).__init__(doc)
         self.langs = self.get('langs') or []
@@ -96,7 +97,7 @@ class Search(dotdict):
             return
 
         files = Media.search_files(**self)
-        if len(files) >= FILES_COUNT_MIN.get(self.category, 1):
+        if len(files) >= settings.FILES_COUNT_MIN.get(self.category, 1):
             if self.mode == 'inc':
                 self._add_next('episode')
             MSearch.remove({'_id': self._id}, safe=True)
@@ -149,8 +150,9 @@ class Search(dotdict):
         return True
 
     def _get_filters(self):
-        res = copy(settings.SEARCH_FILTERS.get(self.category, {}))
-        res['re_incl'] = Title(self._get_query()).get_search_re()
+        filters = Settings.get_settings('search_filters')
+        res = copy(filters.get(self.category, {}))
+        res['include'] = Title(self._get_query()).get_search_re()
         res['langs'] = self.langs
         return res
 

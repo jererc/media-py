@@ -6,12 +6,12 @@ from systools.system import loop, timeout, timer
 from transfer import Transfer
 
 from mediacore.model.result import Result
+from mediacore.model.settings import Settings
 from mediacore.web.search.plugins.filestube import Filestube
 
 from media import settings
 
 
-PATH_FINISHED = settings.PATHS_FINISHED['grab']
 DELTA_RETRY = timedelta(hours=6)
 MAX_TRIES = 5
 
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 @timeout(minutes=30)
 @timer()
 def run():
+    dst = Settings.get_settings('paths')['finished_download']
     for result in Result.find({
             'processed': False,
             '$nor': [
@@ -50,9 +51,9 @@ def run():
                 continue
             type = 'http'
 
-        transfer_id = Transfer.add(src, PATH_FINISHED, type=type,
+        transfer_id = Transfer.add(src, dst, type=type,
                 temp_dir=settings.PATH_TMP)
         Result.update({'_id': result['_id']}, {'$set': {
                 'transfer_id': transfer_id,
                 }}, safe=True)
-        logger.info('added %s transfer %s to %s' % (type, src, PATH_FINISHED))
+        logger.info('added %s transfer %s to %s' % (type, src, dst))

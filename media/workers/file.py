@@ -10,33 +10,42 @@ from filetools.media import iter_files
 
 from mediacore.model.media import Media
 from mediacore.model.worker import Worker
+from mediacore.model.settings import Settings
 
 from media import settings, get_factory
 
 
 NAME = os.path.splitext(os.path.basename(__file__))[0]
-TIMEOUT_UPDATE = 3600 * 6   # seconds
+TIME_RANGE = [4, 8]
 DELTA_UPDATE = timedelta(hours=12)
-RE_FILE_EXCL = re.compile(r'^(%s)/' % '|'.join([re.escape(p) for p in settings.PATHS_EXCLUDE]))
+TIMEOUT_UPDATE = 3600 * 6   # seconds
 
 logger = logging.getLogger(__name__)
 
 
-@timer()
-def update_path(path):
+def validate_update_path():
+    if datetime.now().hour not in range(*TIME_RANGE):
+        return
     res = Worker.get_attr(NAME, 'updated')
     if res and res > datetime.utcnow() - DELTA_UPDATE:
         return
+    return True
+
+@timer()
+def update_path():
+    path = Settings.get_settings('paths')['media_root']
+    excl = Settings.get_settings('paths')['media_root_exclude']
+    re_excl = re.compile(r'^(%s)/' % '|'.join([re.escape(p.rstrip('/')) for p in excl]))
 
     for file in iter_files(path):
-        if not RE_FILE_EXCL.search(file):
+        if not re_excl.search(file):
             Media.add(file)
         time.sleep(.05)
 
     for media in Media.find():
         files_orig = media['files'][:]
         for file in files_orig:
-            if not os.path.exists(file) or RE_FILE_EXCL.search(file):
+            if not os.path.exists(file) or re_excl.search(file):
                 media['files'].remove(file)
 
         if not media['files']:
@@ -68,9 +77,9 @@ def update_media():
 
 @loop(minutes=15)
 def run():
-    target = '%s.workers.file.update_path' % settings.PACKAGE_NAME
-    get_factory().add(target=target,
-            args=(settings.PATH_MEDIA_ROOT,), timeout=TIMEOUT_UPDATE)
+    if validate_update_path():
+        target = '%s.workers.file.update_path' % settings.PACKAGE_NAME
+        get_factory().add(target=target, timeout=TIMEOUT_UPDATE)
 
     target = '%s.workers.file.update_media' % settings.PACKAGE_NAME
     get_factory().add(target=target, timeout=TIMEOUT_UPDATE)

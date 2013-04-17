@@ -21,16 +21,15 @@ DELTA_UPDATE_DEF = [    # delta created, delta updated
     (timedelta(days=2), timedelta(days=2)),
     ]
 
-
 logger = logging.getLogger(__name__)
 
 
-def get_model(objtype):
+def get_model(objtype, objmodel):
     try:
         module = __import__('mediacore.model.%s' % objtype, globals(), locals(), [objtype], -1)
-        return getattr(module, objtype.capitalize())
+        return getattr(module, objmodel)
     except (AttributeError, ImportError), e:
-        logger.error('failed to import model %s: %s' % (objtype, str(e)))
+        logger.error('failed to import model %s: %s' % (objmodel, str(e)))
 
 def validate_object(created, updated):
     if not updated:
@@ -43,8 +42,8 @@ def validate_object(created, updated):
             return True
 
 @timer(30)
-def update_obj_extra(objtype, objid):
-    model = get_model(objtype)
+def update_obj_extra(objtype, objmodel, objid):
+    model = get_model(objtype, objmodel)
     if not model:
         return
     obj = model.find_one({'_id': objid})
@@ -72,11 +71,11 @@ def update_obj_extra(objtype, objid):
     name = model.get_query(obj) if objtype == 'search' else obj['name']
     logger.info('updated %s %s "%s"' % (category, objtype, name))
 
-def update_extra(objtype):
+def update_extra(objtype, objmodel):
     count = 0
 
     sort = [('date', DESCENDING)] if objtype == 'release' else [('created', DESCENDING)]
-    model = get_model(objtype)
+    model = get_model(objtype, objmodel)
     if not model:
         return
     for obj in model.find({
@@ -90,7 +89,7 @@ def update_extra(objtype):
 
         target = '%s.workers.extra.update_obj_extra' % settings.PACKAGE_NAME
         get_factory().add(target=target,
-                args=(objtype, obj['_id']), timeout=TIMEOUT_UPDATE)
+                args=(objtype, objmodel, obj['_id']), timeout=TIMEOUT_UPDATE)
 
         count += 1
         if count == WORKERS_LIMIT:
@@ -99,5 +98,10 @@ def update_extra(objtype):
 @loop(minutes=2)
 def run():
     if Google().accessible:
-        for objtype in ('media', 'release', 'search'):
-            update_extra(objtype)
+        for type, model in [
+                ('media', 'Media'),
+                ('release', 'Release'),
+                ('search', 'Search'),
+                ('similar', 'SimilarSearch'),
+                ]:
+            update_extra(type, model)

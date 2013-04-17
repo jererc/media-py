@@ -12,6 +12,7 @@ from filetools.title import clean
 from mediacore.model.media import Media
 from mediacore.model.subtitles import Subtitles
 from mediacore.model.worker import Worker
+from mediacore.model.settings import Settings
 from mediacore.web.google import Google
 from mediacore.web.opensubtitles import Opensubtitles, DownloadQuotaReached
 from mediacore.web.subscene import Subscene
@@ -20,7 +21,6 @@ from media import settings, get_factory
 
 
 NAME = os.path.splitext(os.path.basename(__file__))[0]
-PATH_ROOT = settings.PATHS_MEDIA_NEW['video'].rstrip('/') + '/'
 WORKERS_LIMIT = 4
 DELTA_UPDATE_DEF = [    # delta created, delta updated
     (timedelta(days=365), timedelta(days=30)),
@@ -58,8 +58,8 @@ def validate_media(media):
         if delta_created > d_created and delta_updated > d_updated:
             return True
 
-def validate_file(file):
-    if not file.startswith(PATH_ROOT):
+def validate_file(file, root_path):
+    if not file.startswith(root_path):
         return
     if not os.path.exists(file):
         return
@@ -68,10 +68,11 @@ def validate_file(file):
     return True
 
 def get_plugins():
+    opensubtitles_info = Settings.get_settings('opensubtitles')
     return {
         'subscene': Subscene(),
-        'opensubtitles': Opensubtitles(settings.OPENSUBTITLES_USERNAME,
-                    settings.OPENSUBTITLES_PASSWORD),
+        'opensubtitles': Opensubtitles(opensubtitles_info['username'],
+                    opensubtitles_info['password']),
         }
 
 @timer(300)
@@ -79,6 +80,13 @@ def search_subtitles(media_id):
     media = Media.get(media_id)
     if not media:
         return
+
+    search_langs = Settings.get_settings('subtitles_langs')
+    if not search_langs:
+        logger.error('missing subtitles search langs')
+        return
+
+    root_path = Settings.get_settings('paths')['media']['video'].rstrip('/') + '/'
 
     info = media['info']
     if info['subtype'] == 'tv':
@@ -97,14 +105,14 @@ def search_subtitles(media_id):
 
     stat = []
     for file in media['files']:
-        if not validate_file(file):
+        if not validate_file(file, root_path):
             continue
 
         file_ = get_file(file)
         dst = file_.get_subtitles_path()
 
         processed = False
-        for lang in settings.SUBTITLES_SEARCH_LANGS:
+        for lang in search_langs:
             logger.debug('searching %s subtitles for "%s" (%s)' % (lang, media['name'], file))
 
             for obj_name, obj in plugins.items():
@@ -138,7 +146,7 @@ def search_subtitles(media_id):
                     doc['created'] = datetime.utcnow()
                     Subtitles.insert(doc, safe=True)
 
-        for lang in settings.SUBTITLES_SEARCH_LANGS:
+        for lang in search_langs:
             if file_.set_subtitles(lang):
                 subtitles_langs.append(lang)
 
@@ -152,6 +160,7 @@ def search_subtitles(media_id):
 def process_media():
     count = 0
 
+    root_path = Settings.get_settings('paths')['media']['video'].rstrip('/') + '/'
     for media in Media.find({
             'type': 'video',
             '$or': [
@@ -160,7 +169,7 @@ def process_media():
                 ],
             },
             sort=[('updated_subs', ASCENDING)]):
-        if not [f for f in media['files'] if f.startswith(PATH_ROOT)]:
+        if not [f for f in media['files'] if f.startswith(root_path)]:
             continue
         if not validate_media(media):
             continue
@@ -189,7 +198,7 @@ def update_quota():
 
 @loop(minutes=2)
 def run():
-    if settings.SUBTITLES_SEARCH_LANGS and Google().accessible:
+    if Google().accessible:
         process_media()
 
     for res in Subtitles.find():

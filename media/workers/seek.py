@@ -9,6 +9,7 @@ from mediacore.model.release import Release
 from mediacore.model.similar import SimilarSearch, SimilarResult
 from mediacore.model.media import Media
 from mediacore.model.search import Search
+from mediacore.model.settings import Settings
 from mediacore.web.google import Google
 from mediacore.web.info import similar_movies, similar_tv, similar_music
 from mediacore.utils.filter import validate_extra
@@ -20,12 +21,6 @@ WORKERS_LIMIT = 5
 TIMEOUT_SEEK = 3600     # seconds
 DEFAULT_RECURRENCE = 48   # hours
 DELTA_SIMILAR_MAX = timedelta(days=365)
-SEARCH_LANGS = {
-    'movies': settings.MOVIES_SEARCH_LANGS,
-    'tv': settings.TV_SEARCH_LANGS,
-    'music': None,
-    }
-FILES_COUNT_MIN = {'music': 3}
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +29,7 @@ class Similar(dotdict):
 
     def __init__(self, doc):
         super(Similar, self).__init__(doc)
+        self.media_filters = Settings.get_settings('media_filters')
 
     def _process_result(self, doc):
         doc['category'] = self.category
@@ -45,26 +41,26 @@ class Similar(dotdict):
             doc['season'] = 1
             doc['episode'] = 1
         doc['similar_id'] = self._id
+        doc['langs'] = self.get('langs')
         if add_search(**doc):
             doc['created'] = datetime.utcnow()
             SimilarResult.insert(doc, safe=True)
             return True
 
     def _get_similar_movies(self):
-        for movie in similar_movies(self.name, type='title',
-                filters=settings.MEDIA_FILTERS):
+        for movie in similar_movies(self.name,
+                type='title', filters=self.media_filters):
             if self._process_result({'name': movie}):
                 return True
 
     def _get_similar_tv(self):
-        for tv in similar_tv(self.name,
-                filters=settings.MEDIA_FILTERS):
+        for tv in similar_tv(self.name, filters=self.media_filters):
             if self._process_result({'name': tv}):
                 return True
 
     def _get_similar_music(self):
         for artist, album in similar_music(self.name,
-                filters=settings.MEDIA_FILTERS):
+                filters=self.media_filters):
             if self._process_result({'name': artist, 'album': album}):
                 return True
 
@@ -81,14 +77,10 @@ def _media_exists(**kwargs):
             category=kwargs.get('category'),
             album=kwargs.get('album'))
 
-    return len(files) >= FILES_COUNT_MIN.get(kwargs.get('category'), 1)
+    return len(files) >= settings.FILES_COUNT_MIN.get(kwargs.get('category'), 1)
 
 def add_search(**search):
-    if _media_exists(**search):
-        return
-
-    search['langs'] = SEARCH_LANGS.get(search['category'])
-    if Search.add(**search):
+    if not _media_exists(**search) and Search.add(**search):
         logger.info('added search %s' % search)
         return True
 
@@ -118,6 +110,9 @@ def process_similars():
             break
 
 def process_releases():
+    media_filters = Settings.get_settings('media_filters')
+    media_langs = Settings.get_settings('media_langs')
+
     for release in Release.find({
             'processed': False,
             'updated': {'$exists': True},
@@ -128,12 +123,14 @@ def process_releases():
                 category='music'):
             valid = True
         else:
-            valid = validate_extra(release['extra'], settings.MEDIA_FILTERS)
+            valid = validate_extra(release['extra'], media_filters)
             if valid is None:
                 continue
 
         if valid:
-            add_search(**Release.get_search(release))
+            search = Release.get_search(release)
+            search['langs'] = media_langs.get(subtype, [])
+            add_search(**search)
         Release.update({'_id': release['_id']},
                 {'$set': {'processed': datetime.utcnow()}}, safe=True)
 
