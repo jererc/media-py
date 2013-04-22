@@ -1,13 +1,14 @@
 import os.path
 from datetime import datetime, timedelta
 from urlparse import urlparse, parse_qs
-from functools import update_wrapper
 import logging
 
-from flask import jsonify, request, make_response, current_app
+from flask import jsonify, request
 
 from bson.objectid import ObjectId
 from pymongo import ASCENDING, DESCENDING
+
+from systools.system.webapp import crossdomain, serialize
 
 from mist import get_users, get_user
 
@@ -25,7 +26,6 @@ from mediacore.model.settings import Settings
 
 from media import settings, get_factory
 from media.apps import app
-from media.apps.utils import serialize
 
 
 EXTRA_FIELDS = ('date', 'rating', 'classification', 'genre', 'country',
@@ -42,48 +42,10 @@ class MediaException(Exception): pass
 class SyncException(Exception): pass
 
 
-def crossdomain(origin=None, methods=None, headers=None, max_age=21600,
-        attach_to_all=True, automatic_options=True):
-    if methods is not None:
-        methods = ', '.join(sorted(x.upper() for x in methods))
-    if headers is not None and not isinstance(headers, basestring):
-        headers = ', '.join(x.upper() for x in headers)
-    if not isinstance(origin, basestring):
-        origin = ', '.join(origin)
-    if isinstance(max_age, timedelta):
-        max_age = max_age.total_seconds()
-
-    def get_methods():
-        if methods is not None:
-            return methods
-
-        options_resp = current_app.make_default_options_response()
-        return options_resp.headers['allow']
-
-    def decorator(f):
-        def wrapped_function(*args, **kwargs):
-            if automatic_options and request.method == 'OPTIONS':
-                resp = current_app.make_default_options_response()
-            else:
-                resp = make_response(f(*args, **kwargs))
-            if not attach_to_all and request.method != 'OPTIONS':
-                return resp
-
-            h = resp.headers
-
-            h['Access-Control-Allow-Origin'] = origin
-            h['Access-Control-Allow-Methods'] = get_methods()
-            h['Access-Control-Max-Age'] = str(max_age)
-            # if headers is not None:
-            #     h['Access-Control-Allow-Headers'] = headers
-
-            h['Access-Control-Allow-Headers'] = 'Origin, X-Requested-With, Content-Type, Accept'
-            return resp
-
-        f.provide_automatic_options = False
-        return update_wrapper(wrapped_function, f)
-    return decorator
-
+@app.route('/status', methods=['GET'])
+@crossdomain(origin='*')
+def check_status():
+    return jsonify(result='media')
 
 #
 # Media
@@ -116,11 +78,6 @@ def _get_object_search(id, type):
     if obj and search:
         search['extra'] = obj.get('extra', {})
         return search
-
-@app.route('/status', methods=['GET'])
-@crossdomain(origin='*')
-def check_status():
-    return jsonify(result=True)
 
 @app.route('/media/create/media', methods=['POST', 'OPTIONS'])
 @crossdomain(origin='*')
