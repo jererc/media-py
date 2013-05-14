@@ -38,8 +38,7 @@ SEARCH_FIELDS = ('name', 'files', 'extra.imdb.director', 'extra.imdb.stars',
 logger = logging.getLogger(__name__)
 
 
-class MediaException(Exception): pass
-class SyncException(Exception): pass
+class SyncError(Exception): pass
 
 
 @app.route('/status', methods=['GET'])
@@ -468,16 +467,16 @@ def remove_media():
 #
 def _get_sync(data):
     if not data.get('user'):
-        raise SyncException('missing user')
+        raise SyncError('missing user')
     if not data.get('dst'):
-        raise SyncException('missing dst')
+        raise SyncError('missing dst')
     if not data.get('category'):
-        raise SyncException('missing category')
+        raise SyncError('missing category')
     params = data.get('parameters', {})
     count_max = params.get('count_max')
     size_max = params.get('size_max')
     if not count_max and not size_max:
-        raise SyncException('missing count and size limits')
+        raise SyncError('missing count and size limits')
 
     return {
         'user': ObjectId(data['user']),
@@ -496,7 +495,7 @@ def _get_sync(data):
 def create_sync():
     try:
         sync = _get_sync(request.json)
-    except SyncException, e:
+    except SyncError, e:
         return jsonify(error=str(e))
     if not Sync.add(**sync):
         return jsonify(error='failed to create sync')
@@ -550,7 +549,7 @@ def update_sync():
         return jsonify(error='missing id')
     try:
         sync = _get_sync(data)
-    except SyncException, e:
+    except SyncError, e:
         return jsonify(error=str(e))
     Sync.update({'_id': ObjectId(data['_id'])},
             {'$set': sync})
