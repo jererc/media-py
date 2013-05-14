@@ -27,7 +27,8 @@ DELTA_UPDATE_DEF = [    # delta created, delta updated
     (timedelta(days=90), timedelta(days=15)),
     (timedelta(days=30), timedelta(days=7)),
     (timedelta(days=10), timedelta(days=2)),
-    (timedelta(days=3), timedelta(hours=6)),
+    (timedelta(days=3), timedelta(hours=12)),
+    (timedelta(days=0), timedelta(hours=6)),
     ]
 DELTA_OPENSUBTITLES_QUOTA = timedelta(hours=12)
 TIMEOUT_SEARCH = 1200   # seconds
@@ -82,6 +83,7 @@ def search_subtitles(media_id):
         return
 
     search_langs = Settings.get_settings('subtitles_langs')
+    temp_dir = Settings.get_settings('paths')['tmp']
     if not search_langs:
         logger.error('missing subtitles search langs')
         return
@@ -133,7 +135,7 @@ def search_subtitles(media_id):
                     if Subtitles.find_one(doc):
                         continue
                     try:
-                        files_dst = obj.download(res['url'], dst, settings.PATH_TMP)
+                        files_dst = obj.download(res['url'], dst, temp_dir)
                     except DownloadQuotaReached, e:
                         update_quota()
                         logger.info(str(e))
@@ -163,6 +165,7 @@ def process_media():
     root_path = Settings.get_settings('paths')['media']['video'].rstrip('/') + '/'
     for media in Media.find({
             'type': 'video',
+            'files': {'$exists': True},
             '$or': [
                 {'updated_subs': {'$exists': False}},
                 {'updated_subs': {'$lt': datetime.utcnow() - DELTA_UPDATE_DEF[-1][1]}},

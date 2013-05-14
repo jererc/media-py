@@ -12,7 +12,6 @@ from mediacore.model.search import Search
 from mediacore.model.settings import Settings
 from mediacore.web.google import Google
 from mediacore.web.info import similar_movies, similar_tv, similar_music
-from mediacore.utils.filter import validate_extra
 
 from media import settings, get_factory
 
@@ -21,6 +20,9 @@ WORKERS_LIMIT = 5
 TIMEOUT_SEEK = 3600     # seconds
 DEFAULT_RECURRENCE = 48   # hours
 DELTA_SIMILAR_MAX = timedelta(days=365)
+DELTA_DATA_MAX = timedelta(days=30)
+DELTA_DATA = timedelta(days=1)
+UPDATE_DATA_LIMIT = 100
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +78,6 @@ def _media_exists(**kwargs):
     files = Media.search_files(name=kwargs.get('name'),
             category=kwargs.get('category'),
             album=kwargs.get('album'))
-
     return len(files) >= settings.FILES_COUNT_MIN.get(kwargs.get('category'), 1)
 
 def add_search(**search):
@@ -101,7 +102,7 @@ def process_similars():
         if processed and processed > datetime.utcnow() - delta:
             continue
 
-        target = '%s.workers.seek.process_similar' % settings.PACKAGE_NAME
+        target = '%s.workers.dig.process_similar' % settings.PACKAGE_NAME
         get_factory().add(target=target,
                 args=(search['_id'],), timeout=TIMEOUT_SEEK)
 
@@ -110,27 +111,25 @@ def process_similars():
             break
 
 def process_releases():
-    media_filters = Settings.get_settings('media_filters')
     media_langs = Settings.get_settings('media_langs')
-
     for release in Release.find({
             'processed': False,
-            'updated': {'$exists': True},
+            'valid': {'$exists': True},
             }):
+        valid = release['valid']
         subtype = release['info'].get('subtype')
 
-        if subtype == 'music' and _media_exists(name=release['artist'],
-                category='music'):
+        if not valid and subtype == 'music' \
+                and _media_exists(name=release['artist'], category='music'):
             valid = True
-        else:
-            valid = validate_extra(release['extra'], media_filters)
-            if valid is None:
-                continue
+        if valid is None:
+            continue
 
         if valid:
             search = Release.get_search(release)
             search['langs'] = media_langs.get(subtype, [])
             add_search(**search)
+
         Release.update({'_id': release['_id']},
                 {'$set': {'processed': datetime.utcnow()}}, safe=True)
 
@@ -141,5 +140,6 @@ def run():
 
     process_releases()
 
-    SimilarResult.remove({'created': {'$lt': datetime.utcnow() - DELTA_SIMILAR_MAX}},
-            safe=True)
+    SimilarResult.remove({'created': {
+            '$lt': datetime.utcnow() - DELTA_SIMILAR_MAX,
+            }}, safe=True)

@@ -33,22 +33,23 @@ def validate_update_path():
 
 @timer()
 def update_path():
-    path = Settings.get_settings('paths')['media_root']
-    excl = Settings.get_settings('paths')['media_root_exclude']
+    paths = Settings.get_settings('paths')
+
+    excl = paths['media_root_exclude']
     re_excl = re.compile(r'^(%s)/' % '|'.join([re.escape(p.rstrip('/')) for p in excl]))
 
-    for file in iter_files(path):
+    for file in iter_files(paths['media_root']):
         if not re_excl.search(file):
-            Media.add(file)
+            Media.add_file(file)
         time.sleep(.05)
 
-    for media in Media.find():
+    for media in Media.find({'files': {'$exists': True}}):
         files_orig = media['files'][:]
         for file in files_orig:
             if not os.path.exists(file) or re_excl.search(file):
                 media['files'].remove(file)
 
-        if not media['files']:
+        if not media['files'] and not media.get('urls'):
             Media.remove({'_id': media['_id']}, safe=True)
         elif media['files'] != files_orig:
             Media.save(media, safe=True)
@@ -69,7 +70,7 @@ def get_mtime(files):
 
 @timer()
 def update_media():
-    for res in Media.find():
+    for res in Media.find({'files': {'$exists': True}}):
         mtime = get_mtime(res['files'])
         if mtime:
             Media.update({'_id': res['_id']},

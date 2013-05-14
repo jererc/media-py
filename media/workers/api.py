@@ -1,7 +1,6 @@
 from systools.system import webapp
 
 from media.apps import app
-
 from media import settings
 
 

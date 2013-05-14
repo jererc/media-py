@@ -9,6 +9,8 @@ from filetools.title import clean
 from mediacore.model.release import Release
 from mediacore.model.worker import Worker
 from mediacore.web.google import Google
+from mediacore.web.metacritic import Metacritic
+from mediacore.web.rottentomatoes import Rottentomatoes
 from mediacore.web.vcdquality import Vcdquality
 from mediacore.web.tvrage import Tvrage
 from mediacore.web.sputnikmusic import Sputnikmusic
@@ -26,8 +28,49 @@ TV_EPISODE_MAX = 20  # maximum episode number for new releases
 logger = logging.getLogger(__name__)
 
 
+def _import_metacritic():
+    for res in Metacritic().releases('movies_dvd'):
+        if res['date'] < datetime.utcnow() - DELTA_RELEASE:
+            continue
+
+        name = res['title']
+        if not Release.find_one({
+                'name': name,
+                'type': 'video',
+                'info.subtype': 'movies',
+                }):
+            Release.insert({
+                    'name': name,
+                    'type': 'video',
+                    'info': {'subtype': 'movies'},
+                    'url': res['url'],
+                    'date': res['date'],
+                    'created': datetime.utcnow(),
+                    'processed': False,
+                    }, safe=True)
+            logger.info('added movies release "%s"' % name)
+
+def _import_rottentomatoes():
+    for res in Rottentomatoes().releases('dvd_new'):
+        name = res['title']
+        if not Release.find_one({
+                'name': name,
+                'type': 'video',
+                'info.subtype': 'movies',
+                }):
+            Release.insert({
+                    'name': name,
+                    'type': 'video',
+                    'info': {'subtype': 'movies'},
+                    'url': res['url'],
+                    'date': datetime.utcnow(),
+                    'created': datetime.utcnow(),
+                    'processed': False,
+                    }, safe=True)
+            logger.info('added movies release "%s"' % name)
+
 def _import_vcdquality():
-    for res in Vcdquality().results(pages_max=VCDQUALITY_PAGES_MAX):
+    for res in Vcdquality().releases(pages_max=VCDQUALITY_PAGES_MAX):
         if res['date'] < datetime.utcnow() - DELTA_RELEASE:
             continue
 
@@ -42,7 +85,7 @@ def _import_vcdquality():
                     'type': 'video',
                     'info': {'subtype': 'movies'},
                     'release': res['release'],
-                    'date': res['date'],    # datetime
+                    'date': res['date'],
                     'created': datetime.utcnow(),
                     'processed': False,
                     }, safe=True)
@@ -55,7 +98,7 @@ def _import_tvrage():
         if res['season'] > 1 or res['episode'] > TV_EPISODE_MAX:
             continue
 
-        name = clean(res['name'], 7)
+        name = clean(res['title'], 7)
         if not Release.find_one({
                 'name': name,
                 'type': 'video',
@@ -110,7 +153,8 @@ def run():
     if Google().accessible:
         factory = get_factory()
 
-        for type in ('vcdquality', 'tvrage', 'sputnikmusic'):
+        for type in ('metacritic', 'rottentomatoes', 'vcdquality',
+                'tvrage', 'sputnikmusic'):
             target = '%s.workers.release.import_releases' % settings.PACKAGE_NAME
             factory.add(target=target, args=(type,), timeout=TIMEOUT_IMPORT)
 

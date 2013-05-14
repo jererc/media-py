@@ -3,29 +3,21 @@ import sys
 import logging
 from logging.handlers import RotatingFileHandler
 
-from systools.system import popen, get_package_modules
+from systools.system import check_commands, get_package_modules
 
 from tracy import DbHandler
 
 from media import settings, get_factory
 
 
+CMDS = ['mediainfo', 'unzip', 'unrar', 'xvfb-run']
 WORKERS_DIR = 'workers'
-CMDS = ['mongod', 'transmission-daemon', 'mediainfo',
-    'unzip', 'unrar', 'xvfb-run']
 
+logging.basicConfig(level=logging.DEBUG)
 
-def check_requirements():
-    res = True
-    for cmd in CMDS:
-        if popen('which %s' % cmd)[-1] != 0:
-            res = False
-            print '%s is missing' % cmd
-
-    return res
 
 def main():
-    if not check_requirements():
+    if not check_commands(CMDS):
         sys.exit(1)
 
     factory = get_factory()

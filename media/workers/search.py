@@ -1,19 +1,22 @@
+import os.path
 from datetime import datetime, timedelta
-import logging
 from copy import copy
+import logging
 
 from pymongo import ASCENDING
 
 from systools.system import loop, timer, dotdict
 
+from transfer import Transfer
+
 from filetools.title import Title
 
 from mediacore.model.search import Search as MSearch
 from mediacore.model.media import Media
-from mediacore.model.result import Result
 from mediacore.model.settings import Settings
 from mediacore.web.search import results
 from mediacore.web.google import Google
+from mediacore.web.netflix import Netflix, NETFLIX_CATEGORIES
 
 from media import settings, get_factory
 
@@ -21,11 +24,12 @@ from media import settings, get_factory
 WORKERS_LIMIT = 5
 TIMEOUT_SEARCH = 1800    # seconds
 DELTA_SEARCH = {
-    'once': timedelta(hours=24),
-    'inc': timedelta(hours=6),
-    'ever': timedelta(hours=24),
+    'inc': timedelta(hours=4),
+    'once': timedelta(hours=4),
+    'ever': timedelta(hours=6),
     }
-DELTA_FILES_SEARCH = timedelta(hours=1)
+DELTA_FILE_SEARCH = timedelta(hours=1)
+DELTA_URL_SEARCH = timedelta(hours=24)
 DELTA_RESULT = {
     'once': timedelta(hours=24),
     'inc': timedelta(hours=12),
@@ -33,9 +37,8 @@ DELTA_RESULT = {
     }
 DELTA_IDLE = timedelta(days=10)
 DELTA_IDLE_SEARCH = timedelta(days=2)
-DELTA_OBSOLETE = timedelta(days=30)
+DELTA_OBSOLETE = timedelta(days=90)
 DELTA_NEXT_SEASON = timedelta(days=60)
-DELTA_RESULTS_MAX = timedelta(days=180)
 PAGES_MAX = 20
 SEARCH_LIMIT = 10
 NB_SEEDS_MIN = {
@@ -52,7 +55,7 @@ class Search(dotdict):
     def __init__(self, doc):
         super(Search, self).__init__(doc)
         self.langs = self.get('langs') or []
-        self.results = self.get('results', [])
+        self.transfers = self.get('transfers', [])
 
         session = self.get('session', {})
         if session.get('nb_downloads') == 0 \
@@ -69,7 +72,8 @@ class Search(dotdict):
             'last_search': session.get('last_search'),
             'last_result': session.get('last_result'),
             'last_download': session.get('last_download'),
-            'last_files_search': session.get('last_files_search'),
+            'last_file_search': session.get('last_file_search'),
+            'last_url_search': session.get('last_url_search'),
             'nb_processed': session.get('nb_processed', 0),
             'sort_results': sort_results,
             'pages_max': pages_max,
@@ -89,11 +93,11 @@ class Search(dotdict):
         if search and MSearch.add(**search):
             logger.info('added search %s' % search)
 
-    def _is_finished(self):
+    def _search_file(self):
         if self.mode == 'ever':
             return
-        date = self.session['last_files_search']
-        if date and date > datetime.utcnow() - DELTA_FILES_SEARCH:
+        date = self.session['last_file_search']
+        if date and date > datetime.utcnow() - DELTA_FILE_SEARCH:
             return
 
         files = Media.search_files(**self)
@@ -101,11 +105,11 @@ class Search(dotdict):
             if self.mode == 'inc':
                 self._add_next('episode')
             MSearch.remove({'_id': self._id}, safe=True)
-            logger.info('removed %s search "%s": found %s' % (self.category, self._get_query(), files))
+            logger.info('removed %s search "%s": found files %s' % (self.category, self._get_query(), files))
             return True
 
         MSearch.update({'_id': self._id},
-                {'$set': {'session.last_files_search': datetime.utcnow()}},
+                {'$set': {'session.last_file_search': datetime.utcnow()}},
                 safe=True)
 
     def _is_obsolete(self):
@@ -118,20 +122,21 @@ class Search(dotdict):
             return True
 
     def _validate_dates(self):
-        now = datetime.utcnow()
+        # now = datetime.utcnow()
 
-        if self.session['last_search'] \
-                and self.session['last_search'] > now - DELTA_SEARCH[self.mode]:
-            return False
-        if self.session['last_download'] \
-                and self.session['last_download'] > now - DELTA_SEARCH[self.mode]:
+        date = self.session['last_search']
+        if date and date > datetime.utcnow() - DELTA_SEARCH[self.mode]:
             return False
 
-        date = self.session['last_result'] or self.session['first_search']
-        if date and date < now - DELTA_IDLE:
-            if self.session['last_search'] \
-                    and self.session['last_search'] > now - DELTA_IDLE_SEARCH:
-                return False
+        # if self.session['last_download'] \
+        #         and self.session['last_download'] > now - DELTA_SEARCH[self.mode]:
+        #     return False
+
+        # date = self.session['last_result'] or self.session['first_search']
+        # if date and date < now - DELTA_IDLE:
+        #     if self.session['last_search'] \
+        #             and self.session['last_search'] > now - DELTA_IDLE_SEARCH:
+        #         return False
 
         return True
 
@@ -142,7 +147,7 @@ class Search(dotdict):
             self._add_next('season')
 
     def validate(self):
-        if self._is_finished() or self._is_obsolete():
+        if self._search_file() or self._is_obsolete():
             return False
         if not self._validate_dates():
             return False
@@ -159,36 +164,79 @@ class Search(dotdict):
     def _validate_result(self, result):
         '''Check result dynamic attributes.
         '''
-        date = result.get('date')
-        if date and date > datetime.utcnow() - DELTA_RESULT[self.mode]:
-            logger.info('filtered "%s" (%s): too recent (%s)' % (result.title, result.plugin, date))
-            return False
+        if result.type == 'torrent':
+            date = result.get('date')
+            if date and date > datetime.utcnow() - DELTA_RESULT[self.mode]:
+                logger.info('filtered "%s" (%s): too recent (%s)' % (result.title, result.plugin, date))
+                return False
 
-        seeds = result.get('seeds')
-        if seeds is not None and seeds < NB_SEEDS_MIN[self.mode]:
-            logger.info('filtered "%s" (%s): not enough seeds (%s)' % (result.title, result.plugin, seeds))
-            return False
+            seeds = result.get('seeds')
+            if seeds is not None and seeds < NB_SEEDS_MIN[self.mode]:
+                logger.info('filtered "%s" (%s): not enough seeds (%s)' % (result.title, result.plugin, seeds))
+                return False
 
         return True
 
+    def _get_netflix_object(self, username, password):
+        path_tmp = Settings.get_settings('paths')['tmp']
+        res = Netflix(username, password,
+                cookie_file=os.path.join(path_tmp, 'netflix_cookies.txt'))
+        if res.logged:
+            return res
+
+    def _search_url(self):
+        date = self.session['last_url_search']
+        if date and date > datetime.utcnow() - DELTA_URL_SEARCH:
+            return
+
+        if self.category not in NETFLIX_CATEGORIES:
+            return
+        netflix_ = Settings.get_settings('netflix')
+        if not netflix_['username'] or not netflix_['password']:
+            return
+        netflix = self._get_netflix_object(netflix_['username'],
+                netflix_['password'])
+        if not netflix:
+            return
+
+        res = netflix.get_info(self.name, self.category)
+        if res:
+            Media.add_url(url=res['url'], name=res['title'],
+                    category=self.category)
+            logger.info('found "%s" on netflix (%s)' % (res['title'], res['url']))
+            if self.category == 'movies':
+                MSearch.remove({'_id': self._id}, safe=True)
+                logger.info('removed %s search "%s": found url %s' % (self.category, self.name, res['url']))
+                return True
+
+        MSearch.update({'_id': self._id},
+                {'$set': {'session.last_url_search': datetime.utcnow()}},
+                safe=True)
+
     def process(self):
         query = self._get_query()
+        dst = Settings.get_settings('paths')['finished_download']
 
         logger.info('processing %s search "%s"' % (self.category, query))
+
+        if self._search_url():
+            return
 
         for result in results(query,
                 category=self.category,
                 sort=self.session['sort_results'],
                 pages_max=self.session['pages_max'],
+                safe=self.category not in ('tv', 'anime', 'books'),
                 **self._get_filters()):
             if not result:
                 self.session['nb_errors'] += 1
                 continue
 
             if result.get('hash'):
-                if Result.find_one({'hash': result.hash}):
-                    continue
-            elif Result.find_one({'url': result.url}):
+                spec = {'info.hash': result.hash}
+            else:
+                spec = {'src': result.url}
+            if Transfer.find_one(spec):
                 continue
 
             self.session['nb_results'] += 1
@@ -199,11 +247,11 @@ class Search(dotdict):
             if self.mode == 'inc':
                 self._add_next('episode')
 
-            result['search_id'] = self._id
-            result_id = Result.insert(result, safe=True)
-            self.results.insert(0, result_id)
+            transfer_id = Transfer.add(result.url, dst, type=result.type)
+            self.transfers.insert(0, transfer_id)
+
             self.session['nb_downloads'] += 1
-            logger.info('found "%s" on %s' % (result.title, result.plugin))
+            logger.info('found "%s" on %s (%s)' % (result.title, result.plugin, result.url))
 
             if self.mode != 'ever':
                 break
@@ -253,6 +301,3 @@ def process_searches():
 def run():
     if Google().accessible:
         process_searches()
-
-    Result.remove({'created': {'$lt': datetime.utcnow() - DELTA_RESULTS_MAX}},
-            safe=True)

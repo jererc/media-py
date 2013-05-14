@@ -1,5 +1,3 @@
-import logging
-
 from factory import Factory
 
 from mediacore.utils.db import connect
@@ -7,7 +5,6 @@ from mediacore.utils.db import connect
 from media import settings
 
 
-logging.basicConfig(level=logging.DEBUG)
 connect(settings.DB_NAME)
 
 

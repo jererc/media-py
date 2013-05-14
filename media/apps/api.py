@@ -108,7 +108,7 @@ def create_media():
     if type == 'url':
         dst = Settings.get_settings('paths')['finished_download']
         try:
-            Transfer.add(name, dst, temp_dir=settings.PATH_TMP)
+            Transfer.add(name, dst)
         except Exception, e:
             return jsonify(error='failed to create transfer: %s' % str(e))
 
@@ -207,9 +207,9 @@ def _has_search(cache, obj):
     return False
 
 def _has_similar(cache, obj):
-    if 'similars' not in cache:
-        cache['similars'] = list(SimilarSearch.find())
-    for res in cache['similars']:
+    if 'similar' not in cache:
+        cache['similar'] = list(SimilarSearch.find())
+    for res in cache['similar']:
         if res['name'] == obj['name'] \
                 and res['category'] == obj['category']:
             return True
@@ -234,7 +234,7 @@ def _get_thumbnail_url(extra, category):
                 return url
 
     elif category in ('movies', 'tv', 'anime'):
-        for section in ('imdb', 'tvrage'):
+        for section in ('rottentomatoes', 'tvrage'):
             url = extra.get(section, {}).get('url_thumbnail')
             if url:
                 return url
@@ -262,6 +262,7 @@ def _get_object(obj, type, **kwargs):
         'category': category,
         'date': date,
         'extra': _get_extra(extra),
+        'rating': obj.get('rating'),
         'url_thumbnail': _get_thumbnail_url(extra, category),
         'video_id': _get_video_id(extra),
         'has_search': kwargs.get('has_search', False),
@@ -273,8 +274,9 @@ def _get_object(obj, type, **kwargs):
         res['obj'] = obj
     else:
         if type == 'media':
-            paths = [os.path.dirname(f) for f in obj['files']]
-            res['path'] = sorted(list(set(paths)))
+            paths = [os.path.dirname(f) for f in obj.get('files', [])]
+            res['paths'] = sorted(list(set(paths)))
+            res['urls'] = obj.get('urls', [])
         elif type == 'release':
             res['release'] = obj.get('release')
 
@@ -310,6 +312,8 @@ def list_media(type, skip, limit):
     sort = request.args.get('sort', 'date')
     if sort == 'name':
         sort = [('name', ASCENDING)]
+    elif sort == 'rating':
+        sort = [('rating', DESCENDING)]
     else:
         sort = [('date', DESCENDING), ('created', DESCENDING)]
 
@@ -447,7 +451,7 @@ def remove_media():
 
     if type == 'media':
         for id in ids:
-            map(remove_file, Media.get_bases(id) or [])
+            map(remove_file, Media.get_bases(id))
         Media.remove(spec)
     elif type == 'search':
         Search.remove(spec)
@@ -599,7 +603,7 @@ def list_settings():
     settings = {}
     for section in ('media_filters', 'search_filters',
             'media_langs', 'subtitles_langs', 'sync',
-            'paths', 'opensubtitles'):
+            'paths', 'opensubtitles', 'netflix'):
         settings[section] = Settings.get_settings(section)
     _set_default_settings(settings)
     return serialize({'result': settings})

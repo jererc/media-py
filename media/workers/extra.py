@@ -5,8 +5,10 @@ from pymongo import DESCENDING
 
 from systools.system import loop, timer
 
+from mediacore.model.settings import Settings
 from mediacore.web.google import Google
 from mediacore.web.info import search_extra
+from mediacore.utils.filter import validate_extra
 
 from media import settings, get_factory
 
@@ -14,11 +16,11 @@ from media import settings, get_factory
 WORKERS_LIMIT = 10
 TIMEOUT_UPDATE = 300    # seconds
 DELTA_UPDATE_DEF = [    # delta created, delta updated
-    (timedelta(days=365), timedelta(days=30)),
-    (timedelta(days=90), timedelta(days=15)),
-    (timedelta(days=30), timedelta(days=7)),
-    (timedelta(days=10), timedelta(days=4)),
-    (timedelta(days=2), timedelta(days=2)),
+    (timedelta(days=365), timedelta(days=60)),
+    (timedelta(days=90), timedelta(days=30)),
+    (timedelta(days=30), timedelta(days=15)),
+    (timedelta(days=10), timedelta(days=7)),
+    (timedelta(days=0), timedelta(days=2)),
     ]
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,28 @@ def validate_object(created, updated):
         if delta_created > d_created and delta_updated > d_updated:
             return True
 
+def _get_rating(extra, category):
+    ratings = []
+
+    if category in ('movies', 'tv', 'anime'):
+        rating = extra.get('rottentomatoes', {}).get('rating')
+        if rating:
+            ratings.append(rating)
+        rating = extra.get('metacritic', {}).get('rating')
+        if rating:
+            ratings.append(rating)
+        rating = extra.get('imdb', {}).get('rating')
+        if rating:
+            ratings.append(rating * 100 / 10)
+
+    elif category == 'music':
+        rating = extra.get('sputnikmusic', {}).get('rating')
+        if rating:
+            ratings.append(rating * 100 / 5)
+
+    if ratings:
+        return int(sum(ratings) / len(ratings))
+
 @timer(30)
 def update_obj_extra(objtype, objmodel, objid):
     model = get_model(objtype, objmodel)
@@ -60,11 +84,15 @@ def update_obj_extra(objtype, objmodel, objid):
     extra = search_extra(obj)
     if extra:
         doc['extra'] = extra
+        doc['rating'] = _get_rating(extra, category)
         if category == 'tv':
             if objtype == 'media':
                 spec = {'info.name': obj['info']['name']}
             else:
                 spec = {'name': obj['name']}
+
+    media_filters = Settings.get_settings('media_filters')
+    doc['valid'] = validate_extra(extra or {}, media_filters)
 
     model.update(spec, {'$set': doc}, multi=True, safe=True)
 

@@ -8,7 +8,6 @@ from filetools.download import downloads, check_download
 from filetools.media import remove_file, move_file
 
 from mediacore.model.download import Download
-from mediacore.model.notification import Notification
 from mediacore.model.media import Media
 from mediacore.model.settings import Settings
 
@@ -36,12 +35,11 @@ def run():
             dst = media_paths[download.type]
             res = move_file(download.file, dst)
             if res:
-                Media.add(res)
+                Media.add_file(res)
                 Download.insert({
                         'name': download.filename,
                         'category': download.type,
                         'path': dst,
                         'created': datetime.utcnow(),
                         }, safe=True)
-                Notification.add('new media "%s"' % download.filename)
                 logger.info('moved %s to %s' % (download.filename, dst))
