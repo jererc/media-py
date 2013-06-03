@@ -151,8 +151,11 @@ def process_sync(sync_id):
         # Delete obsolete destination files
         for dir_ in host.listdir(dst_path):
             if os.path.basename(dir_) not in src_dirs:
-                host.remove(dir_)
-                logger.info('removed obsolete %s@%s:%s' % (host.username, host.host, dir_))
+                try:
+                    host.remove(dir_)
+                    logger.info('removed obsolete %s@%s:%s' % (host.username, host.host, dir_))
+                except Exception, e:
+                    logger.error('failed to remove obsolete %s@%s:%s: %s' % (host.username, host.host, dir_, str(e)))
 
         dst = 'sftp://%s:%s@%s%s:%s' % (host.username, host.password,
                 host.host, dst_path, host.port)
