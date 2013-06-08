@@ -365,6 +365,7 @@ def update_search():
         'category': data['category'],
         'langs': data.get('langs') or [],
         'mode': data['mode'],
+        'safe': data.get('safe', True),
         'session': {},
         }
     if data['category'] == 'music':

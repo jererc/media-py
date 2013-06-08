@@ -226,7 +226,7 @@ class Search(dotdict):
                 category=self.category,
                 sort=self.session['sort_results'],
                 pages_max=self.session['pages_max'],
-                safe=self.category not in ('tv', 'anime', 'books'),
+                safe=self.safe,
                 **self._get_filters()):
             if not result:
                 self.session['nb_errors'] += 1

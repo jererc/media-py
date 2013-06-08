@@ -81,6 +81,8 @@ def _media_exists(**kwargs):
     return len(files) >= settings.FILES_COUNT_MIN.get(kwargs.get('category'), 1)
 
 def add_search(**search):
+    if search['category'] in ['anime', 'tv']:
+        search['safe'] = False
     if not _media_exists(**search) and Search.add(**search):
         logger.info('added search %s' % search)
         return True
