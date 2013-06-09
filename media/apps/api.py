@@ -259,6 +259,7 @@ def _get_object(obj, type, **kwargs):
         'id': obj['_id'],
         'type': type,
         'category': category,
+        'source': obj.get('source'),
         'date': date,
         'extra': _get_extra(extra),
         'rating': obj.get('rating'),
@@ -267,7 +268,6 @@ def _get_object(obj, type, **kwargs):
         'has_search': kwargs.get('has_search', False),
         'has_similar': kwargs.get('has_similar', False),
         }
-
     if type in ('search', 'similar'):
         res['name'] = _get_search_title(obj)
         res['obj'] = obj

@@ -42,6 +42,7 @@ def _import_metacritic():
             Release.insert({
                     'name': name,
                     'type': 'video',
+                    'source': 'metacritic',
                     'info': {'subtype': 'movies'},
                     'url': res['url'],
                     'date': res['date'],
@@ -61,6 +62,7 @@ def _import_rottentomatoes():
             Release.insert({
                     'name': name,
                     'type': 'video',
+                    'source': 'rottentomatoes',
                     'info': {'subtype': 'movies'},
                     'url': res['url'],
                     'date': datetime.utcnow(),
@@ -83,6 +85,7 @@ def _import_vcdquality():
             Release.insert({
                     'name': name,
                     'type': 'video',
+                    'source': 'vcdquality',
                     'info': {'subtype': 'movies'},
                     'release': res['release'],
                     'date': res['date'],
@@ -107,6 +110,7 @@ def _import_tvrage():
             Release.insert({
                     'name': name,
                     'type': 'video',
+                    'source': 'tvrage',
                     'info': {'subtype': 'tv'},
                     'url': res['url'],
                     'date': datetime.utcnow(),  # release date is the date we discovered the show
@@ -134,6 +138,7 @@ def _import_sputnikmusic():
                     'artist': res['artist'],
                     'album': res['album'],
                     'type': 'audio',
+                    'source': 'sputnikmusic',
                     'info': {'subtype': 'music'},
                     'date': res['date'],    # datetime
                     'created': datetime.utcnow(),
