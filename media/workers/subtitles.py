@@ -127,15 +127,12 @@ def search_subtitles(media_id):
                 if not lang_:
                     continue
 
-                for res in obj.results(name, season, episode, date, lang_):
-                    doc = {
-                        'url': res['url'],
-                        'file': file_.file,
-                        }
+                for url in obj.results(name, season, episode, date, lang_):
+                    doc = {'url': url, 'file': file_.file}
                     if Subtitles.find_one(doc):
                         continue
                     try:
-                        files_dst = obj.download(res['url'], dst, temp_dir)
+                        files_dst = obj.download(url, dst, temp_dir)
                     except DownloadQuotaReached, e:
                         update_quota()
                         logger.info(str(e))

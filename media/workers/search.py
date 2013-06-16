@@ -13,6 +13,7 @@ from filetools.title import Title
 
 from mediacore.model.search import Search as MSearch
 from mediacore.model.media import Media
+from mediacore.model.result import Result
 from mediacore.model.settings import Settings
 from mediacore.web.search import results
 from mediacore.web.google import Google
@@ -226,10 +227,16 @@ class Search(dotdict):
                 category=self.category,
                 sort=self.session['sort_results'],
                 pages_max=self.session['pages_max'],
-                safe=self.safe,
                 **self._get_filters()):
             if not result:
                 self.session['nb_errors'] += 1
+                continue
+
+            Result.add_result(result, search_id=self._id)
+
+            if not result.auto:
+                continue
+            if self.safe and not result.safe:
                 continue
 
             if result.get('hash'):

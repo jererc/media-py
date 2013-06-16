@@ -20,6 +20,7 @@ from filetools.title import clean
 from mediacore.model.media import Media
 from mediacore.model.release import Release
 from mediacore.model.search import Search
+from mediacore.model.result import Result
 from mediacore.model.sync import Sync
 from mediacore.model.similar import SimilarSearch
 from mediacore.model.settings import Settings
@@ -343,6 +344,33 @@ def list_media(type, skip, limit):
         for res in SimilarSearch.find(spec, **params):
             items.append(_get_object(res, type=type,
                     has_similar=True))
+
+    return serialize({'result': items})
+
+@app.route('/media/search/results', methods=['POST', 'OPTIONS'])
+@crossdomain(origin='*')
+def get_search_results():
+    data = request.json
+    if not data.get('id'):
+        return jsonify(error='missing id')
+    id = ObjectId(data['id'])
+
+    items = {}
+    for res in Result.find({'search_id': id}):
+        urls = res['url']
+        if not isinstance(urls, (tuple, list)):
+            urls = [urls]
+        for i, url in enumerate(urls):
+            seeds = res.get('seeds')
+            if seeds == 0:
+                continue
+            items.setdefault(res['type'], [])
+            item = {'url': url, 'size': res['size'], 'seeds': seeds}
+            if len(urls) > 1:
+                item['title'] = '%s (%s/%s)' % (res['title'], i + 1, len(urls))
+            else:
+                item['title'] = res['title']
+            items[res['type']].append(item)
 
     return serialize({'result': items})
 
