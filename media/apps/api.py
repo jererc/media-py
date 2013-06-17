@@ -356,7 +356,7 @@ def get_search_results():
     id = ObjectId(data['id'])
 
     items = {}
-    for res in Result.find({'search_id': id}):
+    for res in Result.find({'search_id': id}, sort=[('date', DESCENDING)]):
         urls = res['url']
         if not isinstance(urls, (tuple, list)):
             urls = [urls]
