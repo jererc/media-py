@@ -68,14 +68,6 @@ def validate_file(file, root_path):
         return
     return True
 
-def get_plugins():
-    opensubtitles_info = Settings.get_settings('opensubtitles')
-    return {
-        'subscene': Subscene(),
-        'opensubtitles': Opensubtitles(opensubtitles_info['username'],
-                    opensubtitles_info['password']),
-        }
-
 @timer(300)
 def search_subtitles(media_id):
     media = Media.get(media_id)
@@ -103,7 +95,10 @@ def search_subtitles(media_id):
         date = media.get('extra', {}).get('imdb', {}).get('date')
 
     subtitles_langs = []
-    plugins = get_plugins()
+    plugins = {
+        'subscene': Subscene(),
+        'opensubtitles': Opensubtitles(**Settings.get_settings('opensubtitles')),
+        }
 
     stat = []
     for file in media['files']:
