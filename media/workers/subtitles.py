@@ -115,7 +115,7 @@ def search_subtitles(media_id):
             for obj_name, obj in plugins.items():
                 if not obj.accessible:
                     continue
-                if obj_name == 'opensubtitles' and not validate_quota():
+                if obj_name == 'opensubtitles' and not _validate_quota():
                     continue
                 processed = True
                 lang_ = LANGS_DEF[obj_name].get(lang)
@@ -129,7 +129,7 @@ def search_subtitles(media_id):
                     try:
                         files_dst = obj.download(url, dst, temp_dir)
                     except DownloadQuotaReached, e:
-                        update_quota()
+                        _update_quota()
                         logger.info(str(e))
                         break
                     if not files_dst:
@@ -177,19 +177,17 @@ def process_media():
         if count == WORKERS_LIMIT:
             return
 
-def validate_quota():
+def _validate_quota():
     res = Worker.get_attr(NAME, 'opensubtitles_quota_reached')
-    if not res:
-        return True
-    if res + DELTA_OPENSUBTITLES_QUOTA < datetime.utcnow():
-        res = Worker.set_attr(NAME, 'opensubtitles_quota_reached', None)
-        return True
-    return False
+    if res:
+        if datetime.utcnow() < res + DELTA_OPENSUBTITLES_QUOTA:
+            return False
+        Worker.set_attr(NAME, 'opensubtitles_quota_reached', None)
+    return True
 
-def update_quota():
+def _update_quota():
     if not Worker.get_attr(NAME, 'opensubtitles_quota_reached'):
-        Worker.set_attr(NAME, 'opensubtitles_quota_reached',
-                datetime.utcnow())
+        Worker.set_attr(NAME, 'opensubtitles_quota_reached', datetime.utcnow())
 
 @loop(minutes=2)
 def run():
