@@ -38,7 +38,7 @@ def update_path():
     excl = paths['media_root_exclude']
     re_excl = re.compile(r'^(%s)/' % '|'.join([re.escape(p.rstrip('/')) for p in excl]))
 
-    for file in iter_files(paths['media_root']):
+    for file in iter_files(str(paths['media_root'])):
         if not re_excl.search(file):
             Media.add_file(file)
         time.sleep(.05)
