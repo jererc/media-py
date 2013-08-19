@@ -9,7 +9,7 @@ from systools.system import loop, timer
 from filetools.media import iter_files
 
 from mediacore.model.media import Media
-from mediacore.model.worker import Worker
+from mediacore.model.work import Work
 from mediacore.model.settings import Settings
 
 from media import settings, get_factory
@@ -25,10 +25,10 @@ logger = logging.getLogger(__name__)
 
 def validate_update_path():
     if datetime.now().hour not in range(*TIME_RANGE):
-        return
-    res = Worker.get_attr(NAME, 'updated')
+        return False
+    res = Work.get_info(NAME, 'updated')
     if res and res > datetime.utcnow() - DELTA_UPDATE:
-        return
+        return False
     return True
 
 @timer()
@@ -54,7 +54,7 @@ def update_path():
         elif media['files'] != files_orig:
             Media.save(media, safe=True)
 
-    Worker.set_attr(NAME, 'updated', datetime.utcnow())
+    Work.set_info(NAME, 'updated', datetime.utcnow())
 
 def get_mtime(files):
     dates = []

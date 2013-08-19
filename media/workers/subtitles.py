@@ -11,10 +11,10 @@ from filetools.title import clean
 
 from mediacore.model.media import Media
 from mediacore.model.subtitles import Subtitles
-from mediacore.model.worker import Worker
 from mediacore.model.settings import Settings
+from mediacore.web import RateLimitReached
 from mediacore.web.google import Google
-from mediacore.web.opensubtitles import Opensubtitles, DownloadQuotaReached
+from mediacore.web.opensubtitles import Opensubtitles
 from mediacore.web.subscene import Subscene
 
 from media import settings, get_factory
@@ -115,8 +115,6 @@ def search_subtitles(media_id):
             for obj_name, obj in plugins.items():
                 if not obj.accessible:
                     continue
-                if obj_name == 'opensubtitles' and not _validate_quota():
-                    continue
                 processed = True
                 lang_ = LANGS_DEF[obj_name].get(lang)
                 if not lang_:
@@ -128,9 +126,7 @@ def search_subtitles(media_id):
                         continue
                     try:
                         files_dst = obj.download(url, dst, temp_dir)
-                    except DownloadQuotaReached, e:
-                        _update_quota()
-                        logger.info(str(e))
+                    except RateLimitReached:
                         break
                     if not files_dst:
                         continue
@@ -176,18 +172,6 @@ def process_media():
         count += 1
         if count == WORKERS_LIMIT:
             return
-
-def _validate_quota():
-    res = Worker.get_attr(NAME, 'opensubtitles_quota_reached')
-    if res:
-        if datetime.utcnow() < res + DELTA_OPENSUBTITLES_QUOTA:
-            return False
-        Worker.set_attr(NAME, 'opensubtitles_quota_reached', None)
-    return True
-
-def _update_quota():
-    if not Worker.get_attr(NAME, 'opensubtitles_quota_reached'):
-        Worker.set_attr(NAME, 'opensubtitles_quota_reached', datetime.utcnow())
 
 @loop(minutes=2)
 def run():

@@ -123,22 +123,9 @@ class Search(dotdict):
             return True
 
     def _validate_dates(self):
-        # now = datetime.utcnow()
-
         date = self.session['last_search']
-        if date and date > datetime.utcnow() - DELTA_SEARCH[self.mode]:
+        if date and datetime.utcnow() < date + DELTA_SEARCH[self.mode]:
             return False
-
-        # if self.session['last_download'] \
-        #         and self.session['last_download'] > now - DELTA_SEARCH[self.mode]:
-        #     return False
-
-        # date = self.session['last_result'] or self.session['first_search']
-        # if date and date < now - DELTA_IDLE:
-        #     if self.session['last_search'] \
-        #             and self.session['last_search'] > now - DELTA_IDLE_SEARCH:
-        #         return False
-
         return True
 
     def _check_episode(self):

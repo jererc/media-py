@@ -7,7 +7,7 @@ from systools.system import loop, timer
 from filetools.title import clean
 
 from mediacore.model.release import Release
-from mediacore.model.worker import Worker
+from mediacore.model.work import Work
 from mediacore.web.google import Google
 from mediacore.web.metacritic import Metacritic
 from mediacore.web.rottentomatoes import Rottentomatoes
@@ -148,10 +148,10 @@ def _import_sputnikmusic():
 
 @timer()
 def import_releases(type):
-    res = Worker.get_attr(NAME, type)
+    res = Work.get_info(NAME, type)
     if not res or res < datetime.utcnow() - DELTA_IMPORT:
         globals().get('_import_%s' % type)()
-        Worker.set_attr(NAME, type, datetime.utcnow())
+        Work.set_info(NAME, type, datetime.utcnow())
 
 @loop(minutes=5)
 def run():
