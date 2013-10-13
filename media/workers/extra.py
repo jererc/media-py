@@ -14,7 +14,7 @@ from media import settings, get_factory
 
 
 WORKERS_LIMIT = 10
-TIMEOUT_UPDATE = 300    # seconds
+TIMEOUT_UPDATE = 600    # seconds
 DELTA_UPDATE_DEF = [    # delta created, delta updated
     (timedelta(days=365), timedelta(days=60)),
     (timedelta(days=90), timedelta(days=30)),

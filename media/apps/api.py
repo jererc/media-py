@@ -403,8 +403,22 @@ def update_search():
     for attr in ('season', 'episode'):
         val = data.get(attr)
         info[attr] = int(val) if val else None
-    Search.update({'_id': id}, {'$set': info})
+    Search.update({'_id': id}, {'$set': info}, safe=True)
 
+    return jsonify(result=True)
+
+@app.route('/media/update/search/safe', methods=['POST', 'OPTIONS'])
+@crossdomain(origin='*')
+def update_search_safe():
+    data = request.json
+    if not data.get('id'):
+        return jsonify(error='missing id')
+    id = ObjectId(data['id'])
+    safe = data.get('safe')
+    if not isinstance(safe, bool):
+        return jsonify(error='invalid safe value')
+    Search.update({'_id': id}, {'$set': {'safe': safe, 'session': {}}},
+            safe=True)
     return jsonify(result=True)
 
 @app.route('/media/update/similar', methods=['POST', 'OPTIONS'])
@@ -427,7 +441,7 @@ def update_similar():
         'langs': data.get('langs') or [],
         'recurrence': int(data['recurrence']),
         }
-    SimilarSearch.update({'_id': id}, {'$set': info})
+    SimilarSearch.update({'_id': id}, {'$set': info}, safe=True)
 
     return jsonify(result=True)
 
@@ -438,7 +452,7 @@ def reset_search():
     if not data.get('id'):
         return jsonify(error='missing id')
     Search.update({'_id': ObjectId(data['id'])},
-            {'$set': {'session': {}}})
+            {'$set': {'session': {}}}, safe=True)
     return jsonify(result=True)
 
 @app.route('/media/share', methods=['POST', 'OPTIONS'])
@@ -581,7 +595,7 @@ def update_sync():
     except SyncError, e:
         return jsonify(error=str(e))
     Sync.update({'_id': ObjectId(data['_id'])},
-            {'$set': sync})
+            {'$set': sync}, safe=True)
     return jsonify(result=True)
 
 @app.route('/sync/reset', methods=['POST', 'OPTIONS'])
@@ -591,7 +605,7 @@ def reset_sync():
     if not data.get('id'):
         return jsonify(error='missing id')
     Sync.update({'_id': ObjectId(data['id'])},
-            {'$set': {'reserved': None}})
+            {'$set': {'reserved': None}}, safe=True)
     return jsonify(result=True)
 
 @app.route('/sync/remove', methods=['POST', 'OPTIONS'])
