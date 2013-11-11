@@ -9,6 +9,7 @@ from filetools.title import clean
 from mediacore.model.release import Release
 from mediacore.model.work import Work
 from mediacore.web.google import Google
+from mediacore.web.imdb import Imdb
 from mediacore.web.metacritic import Metacritic
 from mediacore.web.rottentomatoes import Rottentomatoes
 from mediacore.web.vcdquality import Vcdquality
@@ -27,6 +28,26 @@ TV_EPISODE_MAX = 20  # maximum episode number for new releases
 
 logger = logging.getLogger(__name__)
 
+
+def _import_imdb():
+    for res in Imdb().releases():
+        name = res['title']
+        if not Release.find_one({
+                'name': name,
+                'type': 'video',
+                'info.subtype': 'movies',
+                }):
+            Release.insert({
+                    'name': name,
+                    'type': 'video',
+                    'source': 'imdb',
+                    'info': {'subtype': 'movies'},
+                    'url': res['url'],
+                    'date': datetime.utcnow(),
+                    'created': datetime.utcnow(),
+                    'processed': False,
+                    }, safe=True)
+            logger.info('added movies release "%s"' % name)
 
 def _import_metacritic():
     for res in Metacritic().releases('movies_dvd'):
@@ -158,7 +179,7 @@ def run():
     if Google().accessible:
         factory = get_factory()
 
-        for type in ('metacritic', 'rottentomatoes', 'vcdquality',
+        for type in ('imdb', 'metacritic', 'rottentomatoes', 'vcdquality',
                 'tvrage', 'sputnikmusic'):
             target = '%s.workers.release.import_releases' % settings.PACKAGE_NAME
             factory.add(target=target, args=(type,), timeout=TIMEOUT_IMPORT)
