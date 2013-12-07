@@ -76,6 +76,7 @@ def get_recent_media(category, genre_incl=None, genre_excl=None,
             continue
 
         dirs_ = Media.get_bases(media['_id'], dirs_only=True)
+        dirs_ = [d for d in dirs_ if d not in dirs]
         if not dirs_:
             continue
 

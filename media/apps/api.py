@@ -97,6 +97,7 @@ def create_media():
             return jsonify(error='%s %s does not exist' % (type, id))
         search['langs'] = langs
         search['mode'] = data['mode']
+        search['safe'] = False
         if not Search.add(**search):
             return jsonify(error='failed to create search %s' % search)
         return jsonify(result=True)
@@ -128,6 +129,7 @@ def create_media():
             'category': type,
             'mode': data['mode'],
             'langs': langs,
+            'safe': False,
             }
         if type == 'music':
             search['album'] = data.get('album')
