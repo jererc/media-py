@@ -647,7 +647,7 @@ def list_settings():
     settings = {}
     for section in ('media_filters', 'search_filters', 'media_langs',
             'subtitles_langs', 'sync', 'paths', 'opensubtitles',
-            'netflix', 'filestube'):
+            'netflix', 'filestube', 'email'):
         settings[section] = Settings.get_settings(section)
     _set_default_settings(settings)
     return serialize({'result': settings})
