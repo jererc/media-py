@@ -222,8 +222,7 @@ def process_drive():
             drive.set_file_content(file_, body=body, mime_type='text/html')
 
     except AccessTokenRefreshError:
-        Settings.set_settings('google_api_credentials', {'credentials': None})
-        logger.error('revoked or expired credentials')
+        logger.error('revoked or expired google API credentials %s', credentials)
     except DriveError, e:
         logger.error(str(e))
 

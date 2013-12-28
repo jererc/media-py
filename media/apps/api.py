@@ -26,6 +26,7 @@ from mediacore.model.result import Result
 from mediacore.model.sync import Sync
 from mediacore.model.similar import SimilarSearch
 from mediacore.model.settings import Settings
+from mediacore.utils.google import get_auth_url, set_credentials
 
 from media import settings, get_factory
 from media.apps import app
@@ -53,34 +54,24 @@ def check_status():
 #
 # Google API
 #
-def _get_auth_flow():
-    settings_ = Settings.get_settings('google_api')
-    if settings_.get('client_id') \
-            and settings_.get('client_secret') \
-            and settings_.get('oauth_scope') \
-            and settings_.get('redirect_uri'):
-        return OAuth2WebServerFlow(settings_['client_id'], settings_['client_secret'],
-                settings_['oauth_scope'], settings_['redirect_uri'])
-
 @app.route('/google_api/auth_url', methods=['GET'])
 @crossdomain(origin='*')
 def get_google_auth_url():
-    flow = _get_auth_flow()
-    url = flow.step1_get_authorize_url() if flow else None
-    return jsonify(result=url)
+    return jsonify(result=get_auth_url())
 
 @app.route('/google_api/auth_callback', methods=['GET'])
 @crossdomain(origin='*')
 def google_auth_callback():
-    flow = _get_auth_flow()
-    if not flow:
-        return 'OAuth flow error'
+    token = request.args.get('code')
+    res = token and set_credentials(token)
+    return 'OK' if res else 'OAuth flow error'
 
-    code = request.args.get('code')
-    credentials = flow.step2_exchange(code)
-    Settings.set_settings('google_api_credentials',
-            {'credentials': Credentials.to_json(credentials)})
-    return 'OK'
+@app.route('/google_api/auth_token', methods=['POST', 'OPTIONS'])
+@crossdomain(origin='*')
+def validate_google_auth_token():
+    token = request.json.get('token')
+    res = token and set_credentials(token)
+    return jsonify(result=res)
 
 
 #
