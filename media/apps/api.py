@@ -52,29 +52,6 @@ def check_status():
 
 
 #
-# Google API
-#
-@app.route('/google_api/auth_url', methods=['GET'])
-@crossdomain(origin='*')
-def get_google_auth_url():
-    return jsonify(result=get_auth_url())
-
-@app.route('/google_api/auth_callback', methods=['GET'])
-@crossdomain(origin='*')
-def google_auth_callback():
-    token = request.args.get('code')
-    res = token and set_credentials(token)
-    return 'OK' if res else 'OAuth flow error'
-
-@app.route('/google_api/auth_token', methods=['POST', 'OPTIONS'])
-@crossdomain(origin='*')
-def validate_google_auth_token():
-    token = request.json.get('token')
-    res = token and set_credentials(token)
-    return jsonify(result=res)
-
-
-#
 # Media
 #
 def _get_object_search(id, type):
@@ -688,3 +665,26 @@ def update_settings():
     for section, settings in data.items():
         Settings.set_settings(section, settings, overwrite=True)
     return jsonify(result=True)
+
+
+#
+# Google API
+#
+@app.route('/google_api/auth_url', methods=['GET'])
+@crossdomain(origin='*')
+def get_google_auth_url():
+    return jsonify(result=get_auth_url())
+
+@app.route('/google_api/auth_callback', methods=['GET'])
+@crossdomain(origin='*')
+def google_auth_callback():
+    token = request.args.get('code')
+    res = token and set_credentials(token)
+    return 'OK' if res else 'OAuth flow error'
+
+@app.route('/google_api/auth_token', methods=['POST', 'OPTIONS'])
+@crossdomain(origin='*')
+def validate_google_auth_token():
+    token = request.json.get('token')
+    res = token and set_credentials(token)
+    return jsonify(result=res)
