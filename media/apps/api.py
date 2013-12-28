@@ -8,6 +8,8 @@ from flask import jsonify, request
 from bson.objectid import ObjectId
 from pymongo import ASCENDING, DESCENDING
 
+from oauth2client.client import OAuth2WebServerFlow, Credentials
+
 from systools.system.webapp import crossdomain, serialize
 
 from mist import get_users, get_user
@@ -46,6 +48,40 @@ class SyncError(Exception): pass
 @crossdomain(origin='*')
 def check_status():
     return jsonify(result='media')
+
+
+#
+# Google API
+#
+def _get_auth_flow():
+    settings_ = Settings.get_settings('google_api')
+    if settings_.get('client_id') \
+            and settings_.get('client_secret') \
+            and settings_.get('oauth_scope') \
+            and settings_.get('redirect_uri'):
+        return OAuth2WebServerFlow(settings_['client_id'], settings_['client_secret'],
+                settings_['oauth_scope'], settings_['redirect_uri'])
+
+@app.route('/google_api/auth_url', methods=['GET'])
+@crossdomain(origin='*')
+def get_google_auth_url():
+    flow = _get_auth_flow()
+    url = flow.step1_get_authorize_url() if flow else None
+    return jsonify(result=url)
+
+@app.route('/google_api/auth_callback', methods=['GET'])
+@crossdomain(origin='*')
+def google_auth_callback():
+    flow = _get_auth_flow()
+    if not flow:
+        return 'OAuth flow error'
+
+    code = request.args.get('code')
+    credentials = flow.step2_exchange(code)
+    Settings.set_settings('google_api_credentials',
+            {'credentials': Credentials.to_json(credentials)})
+    return 'OK'
+
 
 #
 # Media
@@ -647,7 +683,8 @@ def list_settings():
     settings = {}
     for section in ('media_filters', 'search_filters', 'media_langs',
             'subtitles_langs', 'sync', 'paths', 'opensubtitles',
-            'netflix', 'filestube', 'email'):
+            'netflix', 'filestube', 'email', 'google_api',
+            'google_api_credentials', 'google_drive'):
         settings[section] = Settings.get_settings(section)
     _set_default_settings(settings)
     return serialize({'result': settings})
