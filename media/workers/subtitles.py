@@ -110,7 +110,7 @@ def search_subtitles(media_id):
 
         processed = False
         for lang in search_langs:
-            logger.debug('searching %s subtitles for "%s" (%s)' % (lang, media['name'], file))
+            logger.debug('searching %s subtitles for "%s" (%s)', lang, media['name'], file)
 
             for obj_name, obj in plugins.items():
                 if not obj.accessible:
@@ -131,7 +131,7 @@ def search_subtitles(media_id):
                     if not files_dst:
                         continue
                     for file_dst in files_dst:
-                        logger.info('downloaded %s on %s' % (file_dst, obj_name))
+                        logger.info('downloaded %s on %s', file_dst, obj_name)
 
                     doc['created'] = datetime.utcnow()
                     Subtitles.insert(doc, safe=True)

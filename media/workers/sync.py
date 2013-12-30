@@ -113,12 +113,12 @@ def process_sync(sync_id):
     user = get_user(sync['user'])
     if not user:
         Sync.remove({'_id': sync['_id']}, safe=True)
-        logger.info('failed to find user %s' % sync['user'])
+        logger.info('failed to find user %s', sync['user'])
         return
     path_root = sync['parameters'].get('path') or user.get('paths', {}).get(sync['category'])
     if not path_root:
         Sync.remove({'_id': sync['_id']}, safe=True)
-        logger.info('failed to find %s path for user %s' % (sync['category'], sync['user']))
+        logger.info('failed to find %s path for user %s', sync['category'], sync['user'])
         return
     dst_path = os.path.join(path_root, sync['dst'].strip('/')).rstrip('/') + '/'
 
@@ -131,12 +131,12 @@ def process_sync(sync_id):
     if media_id:
         src = Media.get_bases(media_id, dirs_only=True)
         if not src:
-            logger.info('failed to find path for media %s' % media_id)
+            logger.info('failed to find path for media %s', media_id)
         else:
             dst = 'sftp://%s:%s@%s%s:%s' % (host.username, host.password,
                     host.host, dst_path, host.port)
             Transfer.add(src, dst, sync_id=sync['_id'])
-            logger.info('added transfer %s to %s' % (src, dst))
+            logger.info('added transfer %s to %s', src, dst)
         Sync.remove({'_id': sync['_id']}, safe=True)
 
     else:
@@ -154,14 +154,14 @@ def process_sync(sync_id):
             if os.path.basename(dir_) not in src_dirs:
                 try:
                     host.remove(dir_)
-                    logger.info('removed obsolete %s@%s:%s' % (host.username, host.host, dir_))
+                    logger.info('removed obsolete %s@%s:%s', host.username, host.host, dir_)
                 except Exception, e:
-                    logger.error('failed to remove obsolete %s@%s:%s: %s' % (host.username, host.host, dir_, str(e)))
+                    logger.error('failed to remove obsolete %s@%s:%s: %s', host.username, host.host, dir_, str(e))
 
         dst = 'sftp://%s:%s@%s%s:%s' % (host.username, host.password,
                 host.host, dst_path, host.port)
         transfer_id = Transfer.add(src, dst, sync_id=sync['_id'])
-        logger.info('added transfer %s to %s' % (src, dst))
+        logger.info('added transfer %s to %s', src, dst)
 
         sync['transfer_id'] = transfer_id
         sync['media'] = src

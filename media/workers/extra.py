@@ -31,7 +31,7 @@ def get_model(objtype, objmodel):
         module = __import__('mediacore.model.%s' % objtype, globals(), locals(), [objtype], -1)
         return getattr(module, objmodel)
     except (AttributeError, ImportError), e:
-        logger.error('failed to import model %s: %s' % (objmodel, str(e)))
+        logger.error('failed to import model %s: %s', objmodel, str(e))
 
 def validate_object(created, updated):
     if not updated:
@@ -97,7 +97,7 @@ def update_obj_extra(objtype, objmodel, objid):
     model.update(spec, {'$set': doc}, multi=True, safe=True)
 
     name = model.get_query(obj) if objtype == 'search' else obj['name']
-    logger.info('updated %s %s "%s"' % (category, objtype, name))
+    logger.info('updated %s %s "%s"', category, objtype, name)
 
 def update_extra(objtype, objmodel):
     count = 0

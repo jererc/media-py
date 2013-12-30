@@ -26,7 +26,7 @@ def run():
         for download in downloads(path):
             if not check_download(download.file):
                 if remove_file(download.file):
-                    logger.info('removed %s (bad download)' % download.filename)
+                    logger.info('removed %s (bad download)', download.filename)
                 continue
 
             # Move the download
@@ -42,4 +42,4 @@ def run():
                         'path': dst,
                         'created': datetime.utcnow(),
                         }, safe=True)
-                logger.info('moved %s to %s' % (download.filename, dst))
+                logger.info('moved %s to %s', download.filename, dst)

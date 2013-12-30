@@ -67,10 +67,10 @@ class Similar(dotdict):
                 return True
 
     def process(self):
-        logger.info('searching similar %s for "%s"' % (self.category, self.name))
+        logger.info('searching similar %s for "%s"', self.category, self.name)
         res = getattr(self, '_get_similar_%s' % self.category)()
         if not res:
-            logger.info('failed to find similar %s from "%s"' % (self.category, self.name))
+            logger.info('failed to find similar %s from "%s"', self.category, self.name)
         return res
 
 
@@ -86,7 +86,7 @@ def add_search(**search):
     #     search['safe'] = False
     search['safe'] = False
     if not _media_exists(**search) and Search.add(**search):
-        logger.info('added search %s' % search)
+        logger.info('added search %s', search)
         return True
 
 @timer(300)

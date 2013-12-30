@@ -47,7 +47,7 @@ def _import_imdb():
                     'created': datetime.utcnow(),
                     'processed': False,
                     }, safe=True)
-            logger.info('added movies release "%s"' % name)
+            logger.info('added movies release "%s"', name)
 
 def _import_metacritic():
     for res in Metacritic().releases('movies_dvd'):
@@ -70,7 +70,7 @@ def _import_metacritic():
                     'created': datetime.utcnow(),
                     'processed': False,
                     }, safe=True)
-            logger.info('added movies release "%s"' % name)
+            logger.info('added movies release "%s"', name)
 
 def _import_rottentomatoes():
     for res in Rottentomatoes().releases('dvd_new'):
@@ -90,7 +90,7 @@ def _import_rottentomatoes():
                     'created': datetime.utcnow(),
                     'processed': False,
                     }, safe=True)
-            logger.info('added movies release "%s"' % name)
+            logger.info('added movies release "%s"', name)
 
 def _import_vcdquality():
     for res in Vcdquality().releases(pages_max=VCDQUALITY_PAGES_MAX):
@@ -113,7 +113,7 @@ def _import_vcdquality():
                     'created': datetime.utcnow(),
                     'processed': False,
                     }, safe=True)
-            logger.info('added movies release "%s"' % name)
+            logger.info('added movies release "%s"', name)
 
 def _import_tvrage():
     for res in Tvrage().scheduled_shows():
@@ -138,7 +138,7 @@ def _import_tvrage():
                     'created': datetime.utcnow(),
                     'processed': False,
                     }, safe=True)
-            logger.info('added tv release "%s"' % name)
+            logger.info('added tv release "%s"', name)
 
 def _import_sputnikmusic():
     for res in Sputnikmusic().reviews():
@@ -165,7 +165,7 @@ def _import_sputnikmusic():
                     'created': datetime.utcnow(),
                     'processed': False,
                     }, safe=True)
-            logger.info('added music release "%s"' % name)
+            logger.info('added music release "%s"', name)
 
 @timer()
 def import_releases(type):

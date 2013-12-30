@@ -92,7 +92,7 @@ class Search(dotdict):
         '''
         search = MSearch.get_next(self, mode=mode)
         if search and MSearch.add(**search):
-            logger.info('added search %s' % search)
+            logger.info('added search %s', search)
 
     def _search_file(self):
         if self.mode == 'ever':
@@ -106,7 +106,7 @@ class Search(dotdict):
             if self.mode == 'inc':
                 self._add_next('episode')
             MSearch.remove({'_id': self._id}, safe=True)
-            logger.info('removed %s search "%s": found files %s' % (self.category, self._get_query(), files))
+            logger.info('removed %s search "%s": found files %s', self.category, self._get_query(), files)
             return True
 
         MSearch.update({'_id': self._id},
@@ -119,7 +119,7 @@ class Search(dotdict):
         date = self.session['last_result'] or self.session['first_search']
         if date and date < datetime.utcnow() - DELTA_OBSOLETE:
             MSearch.remove({'_id': self._id}, safe=True)
-            logger.info('removed search "%s" (no result for %d days)' % (self._get_query(), DELTA_OBSOLETE.days))
+            logger.info('removed search "%s" (no result for %d days)', self._get_query(), DELTA_OBSOLETE.days)
             return True
 
     def _validate_dates(self):
@@ -155,12 +155,12 @@ class Search(dotdict):
         if result.type == 'torrent':
             date = result.get('date')
             if date and date > datetime.utcnow() - DELTA_RESULT[self.mode]:
-                logger.info('filtered "%s" (%s): too recent (%s)' % (result.title, result.plugin, date))
+                logger.info('filtered "%s" (%s): too recent (%s)', result.title, result.plugin, date)
                 return False
 
             seeds = result.get('seeds')
             if seeds is not None and seeds < NB_SEEDS_MIN[self.mode]:
-                logger.info('filtered "%s" (%s): not enough seeds (%s)' % (result.title, result.plugin, seeds))
+                logger.info('filtered "%s" (%s): not enough seeds (%s)', result.title, result.plugin, seeds)
                 return False
 
         return True
@@ -191,10 +191,10 @@ class Search(dotdict):
         if res:
             Media.add_url(url=res['url'], name=res['title'],
                     category=self.category)
-            logger.info('found "%s" on netflix (%s)' % (res['title'], res['url']))
+            logger.info('found "%s" on netflix (%s)', res['title'], res['url'])
             if self.category == 'movies':
                 MSearch.remove({'_id': self._id}, safe=True)
-                logger.info('removed %s search "%s": found url %s' % (self.category, self.name, res['url']))
+                logger.info('removed %s search "%s": found url %s', self.category, self.name, res['url'])
                 return True
 
         MSearch.update({'_id': self._id},
@@ -205,7 +205,7 @@ class Search(dotdict):
         query = self._get_query()
         dst = Settings.get_settings('paths')['finished_download']
 
-        logger.info('processing %s search "%s"' % (self.category, query))
+        logger.info('processing %s search "%s"', self.category, query)
 
         if self._search_url():
             return
@@ -245,7 +245,7 @@ class Search(dotdict):
             self.transfers.insert(0, transfer_id)
 
             self.session['nb_downloads'] += 1
-            logger.info('found "%s" on %s (%s)' % (result.title, result.plugin, result.url))
+            logger.info('found "%s" on %s (%s)', result.title, result.plugin, result.url)
 
             if self.mode != 'ever':
                 break

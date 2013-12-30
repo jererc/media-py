@@ -138,6 +138,9 @@ class GmailClient(object):
             for response_part in msg_data:
                 if isinstance(response_part, tuple):
                     msg = message_from_string(response_part[1])
+                    to_email = msg.get('To')
+                    if to_email and from_email not in to_email:
+                        continue
                     payload = msg.get_payload()
                     yield {
                         'num': num,
