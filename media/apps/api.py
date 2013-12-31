@@ -8,8 +8,6 @@ from flask import jsonify, request
 from bson.objectid import ObjectId
 from pymongo import ASCENDING, DESCENDING
 
-from oauth2client.client import OAuth2WebServerFlow, Credentials
-
 from systools.system.webapp import crossdomain, serialize
 
 from mist import get_users, get_user

@@ -142,10 +142,10 @@ class Search(dotdict):
         self._check_episode()
         return True
 
-    def _get_filters(self):
+    def _get_filters(self, query):
         filters = Settings.get_settings('search_filters')
         res = copy(filters.get(self.category, {}))
-        res['include'] = Title(self._get_query()).get_search_re()
+        res['include'] = Title(query).get_search_re(auto=True)
         res['langs'] = self.langs
         return res
 
@@ -165,13 +165,6 @@ class Search(dotdict):
 
         return True
 
-    def _get_netflix_object(self, username, password):
-        path_tmp = Settings.get_settings('paths')['tmp']
-        res = Netflix(username, password,
-                cookie_file=os.path.join(path_tmp, 'netflix_cookies.txt'))
-        if res.logged:
-            return res
-
     def _search_url(self):
         date = self.session['last_url_search']
         if date and date > datetime.utcnow() - DELTA_URL_SEARCH:
@@ -182,8 +175,7 @@ class Search(dotdict):
         netflix_ = Settings.get_settings('netflix')
         if not netflix_['username'] or not netflix_['password']:
             return
-        netflix = self._get_netflix_object(netflix_['username'],
-                netflix_['password'])
+        netflix = get_netflix_object(netflix_['username'], netflix_['password'])
         if not netflix:
             return
 
@@ -214,7 +206,7 @@ class Search(dotdict):
                 category=self.category,
                 sort=self.session['sort_results'],
                 pages_max=self.session['pages_max'],
-                **self._get_filters()):
+                **self._get_filters(query)):
             if not result:
                 self.session['nb_errors'] += 1
                 continue
@@ -265,6 +257,13 @@ class Search(dotdict):
 
         MSearch.save(self, safe=True)
 
+
+def get_netflix_object(username, password):
+    path_tmp = Settings.get_settings('paths')['tmp']
+    res = Netflix(username, password,
+            cookie_file=os.path.join(path_tmp, 'netflix_cookies.txt'))
+    if res.logged:
+        return res
 
 @timer(300)
 def process_search(search_id):
