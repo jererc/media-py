@@ -103,9 +103,10 @@ class FileLine(object):
             if begin and begin.startswith('?'):
                 return self._get_line().lstrip('?').strip()
 
-    def get_patterns(self):
+    def get_patterns(self, has_results=True):
         pattern = self._get_sub_pattern()
-        self.spans[0].text = self.spans[0].text.lstrip('?')
+        prefix = '' if has_results else '!'
+        self.spans[0].text = prefix + self.spans[0].text.lstrip('?')
         repl = self._get_sub_repl()
         return pattern, repl
 
@@ -158,21 +159,23 @@ def check_modified(date, delta):
     return elapsed > delta
 
 def process_query(query):
+    '''Process the query and return the number of results.
+    '''
     if urlparse(query).scheme:
         dst = Settings.get_settings('paths')['finished_download']
         try:
             Transfer.add(query, dst)
         except Exception, e:
             logger.error('failed to create transfer for %s: %s', query, str(e))
-            return False
-
+            return -1
+        count = 1
     else:
         try:
             searches = get_searches(query)
         except QueryError, e:
             logger.info(str(e))
-            return False
-
+            return -1
+        count = len(searches)
         if not searches:
             logger.info('no result for query "%s', query)
         else:
@@ -180,7 +183,7 @@ def process_query(query):
                 if Search.add(**search):
                     logger.info('created search %s', search)
 
-    return True
+    return count
 
 def process_file_queries(body):
     '''Process the file queries and return a list of patterns and replacement strings.
@@ -192,9 +195,9 @@ def process_file_queries(body):
         query = line.get_query()
         if query is None:
             continue
-        if not process_query(query):
-            continue
-        res.append(line.get_patterns())
+        count = process_query(query)
+        if count != -1:
+            res.append(line.get_patterns(count > 0))
 
     return res
 
@@ -226,7 +229,7 @@ def process_drive():
 
     except AccessTokenRefreshError:
         logger.error('revoked or expired google API credentials %s', credentials)
-    except DriveError, e:
+    except (DriveError, errors.HttpError), e:
         logger.error(str(e))
 
 @timeout(minutes=10)
@@ -245,7 +248,7 @@ def process_email():
             username=email_['username'],
             password=email_['password'])
     for message in client.iter_messages(email_['from_email']):
-        if process_query(message['subject']):
+        if process_query(message['subject']) != -1:
             client.delete(message['num'])
 
 @loop(60)
