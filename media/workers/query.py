@@ -121,7 +121,7 @@ class GmailClient(object):
     def __del__(self):
         try:
             self.client.close()
-        except:
+        except Exception:
             pass
         self.client.logout()
 
@@ -230,7 +230,7 @@ def process_drive():
     except AccessTokenRefreshError:
         logger.error('revoked or expired google API credentials %s', credentials)
     except (DriveError, errors.HttpError), e:
-        logger.error(str(e))
+        logger.error('unexpected error: %s', str(e))
 
 @timeout(minutes=10)
 @timer(60)
