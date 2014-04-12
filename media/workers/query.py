@@ -118,7 +118,7 @@ class GmailClient(object):
         self.client.login(username, password)
         self.client.select()
 
-    def __del__(self):
+    def close(self):
         try:
             self.client.close()
         except Exception:
@@ -250,6 +250,7 @@ def process_email():
     for message in client.iter_messages(email_['from_email']):
         if process_query(message['subject']) != -1:
             client.delete(message['num'])
+    client.close()
 
 @loop(60)
 def run():

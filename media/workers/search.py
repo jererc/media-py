@@ -159,7 +159,7 @@ class Search(dotdict):
                 return False
 
             seeds = result.get('seeds')
-            if seeds is not None and seeds < NB_SEEDS_MIN[self.mode]:
+            if seeds is not None and seeds < NB_SEEDS_MIN.get(self.mode, 0):
                 logger.info('filtered "%s" (%s): not enough seeds (%s)', result.title, result.plugin, seeds)
                 return False
 
@@ -168,16 +168,16 @@ class Search(dotdict):
     def _search_url(self):
         date = self.session['last_url_search']
         if date and date > datetime.utcnow() - DELTA_URL_SEARCH:
-            return
+            return False
 
         if self.category not in NETFLIX_CATEGORIES:
-            return
+            return False
         netflix_ = Settings.get_settings('netflix')
         if not netflix_['username'] or not netflix_['password']:
-            return
+            return False
         netflix = get_netflix_object(netflix_['username'], netflix_['password'])
         if not netflix:
-            return
+            return False
 
         res = netflix.get_info(self.name, self.category)
         if res:
@@ -192,6 +192,7 @@ class Search(dotdict):
         MSearch.update({'_id': self._id},
                 {'$set': {'session.last_url_search': datetime.utcnow()}},
                 safe=True)
+        return False
 
     def process(self):
         query = self._get_query()
@@ -199,8 +200,7 @@ class Search(dotdict):
 
         logger.info('processing %s search "%s"', self.category, query)
 
-        if self._search_url():
-            return
+        self._search_url()
 
         for result in results(query,
                 category=self.category,

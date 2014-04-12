@@ -649,7 +649,7 @@ def list_settings():
     settings = {}
     for section in ('media_filters', 'search_filters', 'media_langs',
             'subtitles_langs', 'sync', 'paths', 'opensubtitles',
-            'netflix', 'filestube', 'email', 'google_api',
+            'netflix', 'filestube', 'rutracker', 'email', 'google_api',
             'google_api_credentials', 'google_drive'):
         settings[section] = Settings.get_settings(section)
     _set_default_settings(settings)
