@@ -43,7 +43,7 @@ def update_path():
             Media.add_file(file)
         time.sleep(.05)
 
-    for media in Media.find({'files': {'$exists': True}}):
+    for media in Media.find({'files': {'$exists': True}}, timeout=False):
         files_orig = media['files'][:]
         for file in files_orig:
             if not os.path.exists(file) or re_excl.search(file):
