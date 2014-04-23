@@ -70,7 +70,7 @@ def get_mtime(files):
 
 @timer()
 def update_media():
-    for res in Media.find({'files': {'$exists': True}}):
+    for res in Media.find({'files': {'$exists': True}}, timeout=False):
         mtime = get_mtime(res['files'])
         if mtime:
             Media.update({'_id': res['_id']},
