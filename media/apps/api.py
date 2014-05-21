@@ -267,6 +267,7 @@ def _get_object(obj, type, **kwargs):
         'source': obj.get('source'),
         'date': date,
         'extra': _get_extra(extra),
+        'src': obj.get('src', {}),
         'rating': obj.get('rating'),
         'url_thumbnail': _get_thumbnail_url(extra, category),
         'video_id': _get_video_id(extra),

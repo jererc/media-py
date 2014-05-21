@@ -42,7 +42,7 @@ class Similar(dotdict):
             doc['mode'] = 'inc'
             doc['season'] = 1
             doc['episode'] = 1
-        doc['similar_name'] = self.name
+        doc['src'] = {'similar': self.name}
         doc['langs'] = self.get('langs')
         if add_search(**doc):
             doc['created'] = datetime.utcnow()

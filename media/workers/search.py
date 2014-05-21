@@ -101,10 +101,20 @@ class Search(dotdict):
         if date and date > datetime.utcnow() - DELTA_FILE_SEARCH:
             return
 
-        files = Media.search_files(**self)
-        if len(files) >= settings.FILES_COUNT_MIN.get(self.category, 1):
+        media_ = Media.search(**self)
+        files = []
+        for res in media_:
+            files.extend(res.get('files', []))
+
+        if media_ and files:
             if self.mode == 'inc':
                 self._add_next('episode')
+
+            src = self.get('src')
+            if src:
+                Media.update({'_id': {'$in': [m['_id'] for m in media_]}},
+                        {'$set': {'src': src}}, safe=True)
+
             MSearch.remove({'_id': self._id}, safe=True)
             logger.info('removed %s search "%s": found files %s', self.category, self._get_query(), files)
             return True
